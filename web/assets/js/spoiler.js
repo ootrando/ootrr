@@ -46,6 +46,8 @@ export function full_text(res, ctx) {
   if (ctx.plando && ctx.plando.length) {
     out.push(`Plandomizer (${ctx.plando.length})`, RULE, ...ctx.plando.map((p) => `  ${p.location}: ${p.item}`), "");
   }
+  if (sp.loot_pool) out.push(sp.loot_pool.trimEnd(), "");
+  else out.push("Loot pool changes", RULE, "  Unavailable for this seed.", "", "Total Heart Pool", RULE, "  Unavailable for this seed.", "");
   if (steps.length) {
     out.push(`Playthrough (${steps.length} steps)`, RULE);
     steps.forEach((step, i) => {
@@ -62,7 +64,10 @@ export function full_text(res, ctx) {
 export function text(res) {
   const sp = res.spoiler || {};
   const locs = sp.locations && sp.locations.length ? sp.locations : res.placements || [];
-  const lines = ["OOTRR spoiler", `Seed: ${res.seed}`, `Checksum: ${res.checksum}`, "", "Placements"];
+  const lines = ["OOTRR spoiler", `Seed: ${res.seed}`, `Checksum: ${res.checksum}`, ""];
+  if (sp.loot_pool) lines.push(sp.loot_pool.trimEnd(), "");
+  else lines.push("Loot pool changes", "  Unavailable for this seed.", "", "Total Heart Pool", "  Unavailable for this seed.", "");
+  lines.push("Placements");
   for (const [a, b] of locs) lines.push(`  ${a}: ${b}`);
   (sp.playthrough || []).forEach((step, i) => {
     lines.push("", `Step ${i + 1}`);

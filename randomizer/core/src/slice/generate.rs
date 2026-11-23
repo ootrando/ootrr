@@ -1,5 +1,5 @@
 use std::cell::Cell;
-use std::collections::{BTreeMap as BM, HashMap as HM};
+use std::collections::{BTreeMap as BM, HashMap as HM, HashSet as HS};
 use std::fmt::Write as W;
 use std::sync::Arc;
 use std::time::Duration;
@@ -56,6 +56,7 @@ pub struct Generated {
     pub report: String,
     pub spoiler: Option<String>,
     pub spheres: Vec<Vec<(String, String)>>,
+    pub loot_pool: Option<String>,
 }
 
 pub fn is_song(actor: &str) -> bool {
@@ -134,6 +135,95 @@ fn item_name(w: &World, v: &Placement, l: LocId) -> String {
 }
 
 type Steps = Vec<Vec<(String, String)>>;
+
+// Legacy logic entries that do not represent additional remake heart rewards.
+const NON_REMAKE_HEARTS: [&str; 3] = ["GF Freestanding PoH", "Ice Cavern Freestanding PoH", "ZR Frogs in the Rain"];
+
+fn loot_pool_text(d: &Data, w: &World, pooled: &Placement, base: &Placement, got: &Placement, free: &[LocId], starting: i64) -> String {
+    let mut changes: BM<&str, i64> = BM::new();
+    let mut pieces: usize = 0;
+    let mut containers: usize = 0;
+    for &l in free {
+        if pooled.get(l) != base.get(l) {
+            if let Some(i) = pooled.get(l) {
+                *changes.entry(&w.items.names[i]).or_default() -= 1;
+            }
+            if let Some(i) = base.get(l) {
+                *changes.entry(&w.items.names[i]).or_default() += 1;
+            }
+        }
+        if let Some(i) = got.get(l) {
+            let name: &str = &w.items.names[i];
+            if name == crate::start_items::pool::CONTAINER {
+                containers += 1;
+            } else if crate::start_items::pool::PIECES.contains(&name) {
+                pieces += 1;
+            }
+        }
+    }
+    let free_set: HS<LocId> = free.iter().copied().collect();
+    let mut fixed: Vec<(&str, &str)> = Vec::new();
+    let mut unmapped: Vec<(&str, &str)> = Vec::new();
+    for &l in &w.real {
+        if free_set.contains(&l) || NON_REMAKE_HEARTS.contains(&w.locs[l].name.as_str()) {
+            continue;
+        }
+        if let Some(i) = got.get(l) {
+            let item: &str = &w.items.names[i];
+            if item == crate::start_items::pool::CONTAINER || crate::start_items::pool::PIECES.contains(&item) {
+                let name: &str = &w.locs[l].name;
+                let group = if d.cat.by_name(name).is_some() || d.flow.by_name(name).is_some() { &mut fixed } else { &mut unmapped };
+                group.push((name, item));
+            }
+        }
+    }
+    fixed.sort_unstable();
+    unmapped.sort_unstable();
+    let mut out: String = String::new();
+    let _ = writeln!(out, "Loot pool changes");
+    let _ = writeln!(out, "  Net changes after the standard shuffled pool is built:");
+    for (heading, positive) in [("Added", true), ("Removed", false)] {
+        let _ = writeln!(out, "  {heading}:");
+        let mut any: bool = false;
+        for (item, count) in &changes {
+            if (positive && *count > 0) || (!positive && *count < 0) {
+                let _ = writeln!(out, "    {} x {}", count.unsigned_abs(), item);
+                any = true;
+            }
+        }
+        if !any {
+            let _ = writeln!(out, "    None");
+        }
+    }
+    let fixed_pieces: usize = fixed.iter().filter(|(_, item)| crate::start_items::pool::PIECES.contains(item)).count();
+    let fixed_containers: usize = fixed.len() - fixed_pieces;
+    let unmapped_pieces: usize = unmapped.iter().filter(|(_, item)| crate::start_items::pool::PIECES.contains(item)).count();
+    let unmapped_containers: usize = unmapped.len() - unmapped_pieces;
+    let total: i64 = starting * 4 + (containers + fixed_containers + unmapped_containers) as i64 * 4 + (pieces + fixed_pieces + unmapped_pieces) as i64;
+    let _ = writeln!(out, "\nTotal Heart Pool");
+    let _ = writeln!(out, "  Starting hearts: {starting}");
+    let _ = writeln!(out, "  Heart Containers in shuffled locations: {containers}");
+    let _ = writeln!(out, "  Pieces of Heart in shuffled locations: {pieces}");
+    let _ = writeln!(out, "  Unshuffled mapped rewards: {fixed_containers} Heart Containers, {fixed_pieces} Pieces of Heart");
+    for (name, item) in &fixed {
+        let _ = writeln!(out, "    {name}: {item}");
+    }
+    let _ = writeln!(out, "  Unmapped logic rewards (unverified): {unmapped_containers} Heart Containers, {unmapped_pieces} Pieces of Heart");
+    for (name, item) in &unmapped {
+        let _ = writeln!(out, "    {name}: {item}");
+    }
+    let _ = writeln!(out, "  Total Heart Containers (modeled): {}", containers + fixed_containers + unmapped_containers);
+    let _ = writeln!(out, "  Total Pieces of Heart (modeled): {}", pieces + fixed_pieces + unmapped_pieces);
+    if unmapped.is_empty() {
+        let _ = writeln!(out, "  Total: {} hearts and {} extra pieces", total / 4, total % 4);
+        let _ = writeln!(out, "  Exactly 20 hearts: {}", if total == 80 { "Yes" } else { "No" });
+    } else {
+        let _ = writeln!(out, "  Estimated total: {} hearts and {} extra pieces", total / 4, total % 4);
+        let _ = writeln!(out, "  Exactly 20 hearts (estimated): {}", if total == 80 { "Yes" } else { "No" });
+        let _ = writeln!(out, "  Unmapped logic rewards may not correspond to distinct in-game rewards; the total is not verified in game.");
+    }
+    out
+}
 
 fn spoiler_text(w: &World, vanilla: &Placement, got: &Placement, pk: &Pick) -> Res<(String, Steps)> {
     let sp: Spoiler = playthrough(w, got)?;
@@ -284,8 +374,11 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         p.notes.retain(|n| !pu::is_note(n));
     }
     let pooled: Placement = restore_upgrades(&w, d, &vanilla, &pk.free, &|it: ItemId, l: LocId| allowed(d, &w, &p, it, l));
-    let (base, gone): (Placement, Vec<String>) = crate::start_items::pool::base(d, &w, &p, &pooled, &pk.free)?;
+    let (mut base, gone): (Placement, Vec<String>) = crate::start_items::pool::base(d, &w, &p, &pooled, &pk.free)?;
     p.notes.extend(gone);
+    if let Some(note) = crate::start_items::pool::adjust_hearts(&w, s, seed, &mut base, &pk.free)? {
+        p.notes.push(note);
+    }
     let ex: Vec<String> = check_excluded(&w, &p, &pk.free, &base)?;
     p.notes.extend(ex);
     let seen: Vec<Cell<u8>> = vec![Cell::new(0); w.items.len() * w.locs.len()];
@@ -435,8 +528,16 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     if let Some(l) = &gates {
         seed_file.entrances = l.to_map();
     }
+    let loot_pool: Option<String> = if o.spoiler {
+        Some(loot_pool_text(d, &w, &pooled, &base, &got, &pk.free, s.int("starting_hearts")?))
+    } else {
+        None
+    };
     let (sp, spheres): (Option<String>, Steps) = if o.spoiler {
         let (mut t, st): (String, Steps) = spoiler_text(&w, &vanilla, &got, &pk)?;
+        if let Some(summary) = &loot_pool {
+            t.insert_str(0, &format!("{summary}\n"));
+        }
         let fixed: BM<String, String> = if crate::slice::tier_fix::active(d, &w, &pk.free) {
             crate::slice::tier_fix::verdict(d, &w, &got, &pk.free)?.assign
         } else {
@@ -461,7 +562,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     if let Some(l) = &gates {
         rep.push_str(&crate::entr::text::report(l));
     }
-    Ok(Generated { seed_file, counts, report: rep, spoiler: sp, spheres })
+    Ok(Generated { seed_file, counts, report: rep, spoiler: sp, spheres, loot_pool })
 }
 
 pub fn settle_keys(d: &Data, p: &mut Plan, w: &World) -> bool {
@@ -546,6 +647,142 @@ mod tests {
         s.set(crate::flow_extra::SETTING, Value::Bool(false)).unwrap();
         s.set("shuffle_boss_hearts", Value::Bool(false)).unwrap();
         s
+    }
+
+    #[test]
+    fn loot_pool_counts_net_changes_and_all_heart_variants() {
+        let d: Data = Data::load().unwrap();
+        let w: World = world(&d).unwrap();
+        let item = |name: &str| w.items.names.iter().position(|n| n == name).unwrap();
+        let green: ItemId = item("Rupees (5)");
+        let piece: ItemId = item("Piece of Heart");
+        let outside: ItemId = item("Piece of Heart (Out of Logic)");
+        let treasure: ItemId = item("Piece of Heart (Treasure Chest Game)");
+        let container: ItemId = item("Heart Container");
+        let free: Vec<LocId> = w.real.iter().copied().take(4).collect();
+        let mut vanilla: Placement = Placement::new(w.locs.len());
+        let mut base: Placement = Placement::new(w.locs.len());
+        let mut got: Placement = Placement::new(w.locs.len());
+        for &l in &free {
+            vanilla.put(l, green);
+        }
+        for (&l, i) in free.iter().zip([piece, outside, treasure, container]) {
+            base.put(l, i);
+        }
+        for (&l, i) in free.iter().zip([container, treasure, piece, outside]) {
+            got.put(l, i);
+        }
+        let text: String = loot_pool_text(&d, &w, &vanilla, &base, &got, &free, 18);
+        assert!(text.contains("4 x Rupees (5)"));
+        assert!(text.contains("1 x Piece of Heart (Treasure Chest Game)"));
+        assert!(text.contains("Heart Containers in shuffled locations: 1"));
+        assert!(text.contains("Pieces of Heart in shuffled locations: 3"));
+        assert!(text.contains("19 hearts and 3 extra pieces"));
+        assert!(text.contains("Exactly 20 hearts: No"));
+        let over: String = loot_pool_text(&d, &w, &vanilla, &base, &got, &free, 19);
+        assert!(over.contains("20 hearts and 3 extra pieces"));
+        assert!(over.contains("Exactly 20 hearts: No"));
+        got.put(free[0], piece);
+        let exact: String = loot_pool_text(&d, &w, &vanilla, &base, &got, &free, 19);
+        assert!(exact.contains("Exactly 20 hearts: Yes"));
+        let mapped: LocId = w.loc("LLR Freestanding PoH").unwrap();
+        let mapped_container: LocId = w.loc("DMT Freestanding PoH").unwrap();
+        let unknown: LocId = w.real.iter().copied().find(|l| {
+            let name: &str = &w.locs[*l].name;
+            !free.contains(l) && !NON_REMAKE_HEARTS.contains(&name) && d.cat.by_name(name).is_none() && d.flow.by_name(name).is_none()
+        }).unwrap();
+        got.put(mapped, piece);
+        got.put(mapped_container, container);
+        got.put(unknown, piece);
+        let with_fixed: String = loot_pool_text(&d, &w, &vanilla, &base, &got, &free, 19);
+        assert!(with_fixed.contains("Unshuffled mapped rewards: 1 Heart Containers, 1 Pieces of Heart"));
+        assert!(with_fixed.contains("Unmapped logic rewards (unverified): 0 Heart Containers, 1 Pieces of Heart"));
+        assert!(with_fixed.contains("Total Heart Containers (modeled): 1"));
+        assert!(with_fixed.contains("Total Pieces of Heart (modeled): 6"));
+        assert!(with_fixed.contains("Estimated total: 21 hearts and 2 extra pieces"));
+        let mut more_free: Vec<LocId> = free.clone();
+        more_free.extend([mapped, mapped_container, unknown]);
+        let moved_to_pool: String = loot_pool_text(&d, &w, &vanilla, &base, &got, &more_free, 19);
+        assert!(moved_to_pool.contains("Unshuffled mapped rewards: 0 Heart Containers, 0 Pieces of Heart"));
+        assert!(moved_to_pool.contains("Unmapped logic rewards (unverified): 0 Heart Containers, 0 Pieces of Heart"));
+        assert!(moved_to_pool.contains("Total: 21 hearts and 2 extra pieces"));
+        let unchanged: String = loot_pool_text(&d, &w, &vanilla, &vanilla, &vanilla, &free, 3);
+        assert!(unchanged.contains("Added:\n    None\n  Removed:\n    None"));
+    }
+
+    #[test]
+    fn heart_summary_accounts_for_fixed_and_unmapped_checks() {
+        let d: Data = Data::load().unwrap();
+        for enabled in [false, true] {
+            let mut s: Settings = Settings::default();
+            s.set("shuffle_treasure_reward", Value::Bool(enabled)).unwrap();
+            s.set("shuffle_frog_bug_heart", Value::Bool(enabled)).unwrap();
+            s.set("shuffle_scrubs_a", Value::Bool(enabled)).unwrap();
+            let p: Plan = plan(&s).unwrap();
+            let w: World = world_with(&d, &p.logic()).unwrap();
+            let v: Placement = vanilla_place(&w, &d).unwrap();
+            let pk: Pick = pick(&d, &w, &p);
+            let text: String = loot_pool_text(&d, &w, &v, &v, &v, &pk.free, 3);
+            for name in ["Market Treasure Chest Game Reward", "ZR Frogs Bug Game", "DMC Deku Scrub"] {
+                assert_eq!(text.contains(&format!("    {name}:")), !enabled, "{name}\n{text}");
+            }
+            for name in NON_REMAKE_HEARTS {
+                assert!(!text.contains(&format!("    {name}:")), "{name}\n{text}");
+            }
+            assert!(!text.contains("    LLR Freestanding PoH:"));
+        }
+        let mut s: Settings = Settings::default();
+        s.set("shuffle_rewards", Value::s("off")).unwrap();
+        s.set("shuffle_boss_hearts", Value::Bool(false)).unwrap();
+        let p: Plan = plan(&s).unwrap();
+        let w: World = world_with(&d, &p.logic()).unwrap();
+        let v: Placement = vanilla_place(&w, &d).unwrap();
+        let pk: Pick = pick(&d, &w, &p);
+        let text: String = loot_pool_text(&d, &w, &v, &v, &v, &pk.free, 3);
+        for name in ["ZR Frogs Ocarina Game", "HF Deku Scrub Grotto", "Deku Tree Queen Gohma Heart"] {
+            assert!(text.contains(&format!("    {name}:")), "{name}\n{text}");
+        }
+        let l: LocId = w.loc("LLR Freestanding PoH").unwrap();
+        let free: Vec<LocId> = pk.free.iter().copied().filter(|x| *x != l).collect();
+        let text: String = loot_pool_text(&d, &w, &v, &v, &v, &free, 3);
+        assert!(text.contains("    LLR Freestanding PoH: Piece of Heart"));
+    }
+
+    #[test]
+    fn legacy_heart_entries_do_not_inflate_generated_totals() {
+        let d: Data = Data::load().unwrap();
+        for enabled in [false, true] {
+            let mut s: Settings = Settings::default();
+            s.set("starting_hearts", Value::Int(1)).unwrap();
+            s.set("shuffle_treasure_reward", Value::Bool(enabled)).unwrap();
+            s.set("shuffle_frog_bug_heart", Value::Bool(enabled)).unwrap();
+            s.set("shuffle_scrubs_a", Value::Bool(enabled)).unwrap();
+            let g: Generated = generate_data(&d, &s, "heart total", &GenOpts { spoiler: true, ..GenOpts::default() }).unwrap();
+            let summary: &str = g.loot_pool.as_deref().unwrap();
+            assert!(summary.contains("Total: 20 hearts and 0 extra pieces"), "{summary}");
+            assert!(summary.contains("Exactly 20 hearts: Yes"), "{summary}");
+            for name in NON_REMAKE_HEARTS {
+                assert!(!summary.contains(&format!("    {name}:")), "{summary}");
+            }
+        }
+    }
+
+    #[test]
+    fn generated_spoiler_reports_heart_additions_and_removals() {
+        let d: Data = Data::load().unwrap();
+        for (start, heading, count) in [(1, "Added", 2), (4, "Removed", 1)] {
+            let mut s: Settings = Settings::default();
+            s.set("starting_hearts", Value::Int(start)).unwrap();
+            s.set("heart_pool", Value::s("containers")).unwrap();
+            let g: Generated = generate_data(&d, &s, "heart summary", &GenOpts { spoiler: true, ..GenOpts::default() }).unwrap();
+            let summary: &str = g.loot_pool.as_deref().unwrap();
+            let section: &str = summary.split(&format!("  {heading}:\n")).nth(1).unwrap().split("\n  Removed:").next().unwrap().split("\n\nTotal Heart Pool").next().unwrap();
+            assert!(section.contains(&format!("{count} x Heart Container")), "{summary}");
+            for upgrade in [" x Bomb Bag", " x Bow", " x Slingshot"] {
+                assert!(!summary.split("\n\nTotal Heart Pool").next().unwrap().contains(upgrade), "{summary}");
+            }
+            assert!(g.spoiler.as_deref().unwrap().contains(summary.trim_end()));
+        }
     }
 
     #[test]

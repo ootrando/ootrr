@@ -206,6 +206,20 @@ mod tests {
     }
 
     #[test]
+    fn heart_pool_choice_is_enabled_and_round_trips_only_for_nondefault_hearts() {
+        let mut s = Settings::default();
+        assert!(!s.is_enabled("heart_pool"));
+        s.set("starting_hearts", Value::Int(1)).unwrap();
+        s.set("heart_pool", Value::s("pieces")).unwrap();
+        assert!(s.is_enabled("heart_pool"));
+        let decoded = Settings::decode(&s.encode().unwrap()).unwrap().settings;
+        assert_eq!(decoded.text("heart_pool").unwrap(), "pieces");
+        s.set("starting_hearts", Value::Int(3)).unwrap();
+        let decoded = Settings::decode(&s.encode().unwrap()).unwrap().settings;
+        assert_eq!(decoded.text("heart_pool").unwrap(), "random");
+    }
+
+    #[test]
     fn nums_and_choice_order_are_pinned() {
         let want: [(&str, u16, &[&str]); 4] = [
             ("shuffle_chests", 8, &["off", "overworld", "dungeons", "all"]),

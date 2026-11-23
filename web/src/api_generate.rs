@@ -108,10 +108,14 @@ fn spoiler(g: &Generated, wanted: bool) -> Json {
         .iter()
         .map(|sp| Json::Arr(sp.iter().map(|(l, i)| pair(l, ootrr_core::spoiler::shown(i))).collect()))
         .collect();
-    Json::obj()
+    let mut out: Json = Json::obj()
         .with("available", true.into())
         .with("locations", Json::Arr(locs))
-        .with("playthrough", Json::Arr(steps))
+        .with("playthrough", Json::Arr(steps));
+    if let Some(summary) = &g.loot_pool {
+        out.put("loot_pool", summary.as_str().into());
+    }
+    out
 }
 
 #[cfg(test)]
@@ -145,6 +149,11 @@ mod tests {
         assert_eq!(sp.get("available").and_then(|x| x.as_bool()), Some(true));
         assert_eq!(sp.get("locations").and_then(|x| x.as_arr()).unwrap().len(), sf.placements.len());
         assert!(!sp.get("playthrough").and_then(|x| x.as_arr()).unwrap().is_empty());
+        let summary: &str = sp.get("loot_pool").and_then(|x| x.as_str()).unwrap();
+        let pieces: usize = sf.placements.values().filter(|v| matches!(v.as_str(), "Piece of Heart" | "Piece of Heart (Out of Logic)" | "Piece of Heart (Treasure Chest Game)")).count();
+        let containers: usize = sf.placements.values().filter(|v| v.as_str() == "Heart Container").count();
+        assert!(summary.contains(&format!("Pieces of Heart in shuffled locations: {pieces}")));
+        assert!(summary.contains(&format!("Heart Containers in shuffled locations: {containers}")));
         assert!(r.get("report").and_then(|x| x.as_str()).unwrap().contains("Randomized"));
     }
 
@@ -169,6 +178,7 @@ mod tests {
         let r: Json = run(&j(r#"{"seed":"s","settings":{},"spoiler":false}"#)).unwrap();
         let sp: &Json = r.get("spoiler").unwrap();
         assert_eq!(sp.get("available").and_then(|x| x.as_bool()), Some(false));
+        assert!(sp.get("loot_pool").is_none());
         assert_eq!(r.get("placements_ready").and_then(|x| x.as_bool()), Some(true));
     }
 

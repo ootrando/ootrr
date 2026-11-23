@@ -101,13 +101,15 @@ pub(crate) fn actors_for(d: &Data, seed: &SeedFile) -> Res<BM<String, String>> {
             dests.entry(item.clone()).or_default().push(loc.clone());
         }
     }
-    let stripped: bool = crate::start_items::pool::active(&plan(&seed.settings()?.settings)?);
+    let settings = seed.settings()?.settings;
+    let stripped: bool = crate::start_items::pool::active(&plan(&settings)?);
+    let hearts_changed: bool = settings.int("starting_hearts")? != crate::start_items::give::VANILLA_HEARTS;
     let mut out: BM<String, String> = BM::new();
     for (item, locs) in &dests {
         let mut acts: Vec<String> = pool.get(item).cloned().unwrap_or_default();
         let net: isize = crate::pot_slice::targets::delta(d, seed, item) + crate::shops::seed::delta(seed, item) + crate::slice::silver::delta(seed, item);
         adjust(d, item, net, &mut acts);
-        if stripped {
+        if stripped || (hearts_changed && crate::start_items::pool::heart_adjusted_item(item)) {
             crate::start_items::pool::fit_actors(d, item, locs.len(), &mut acts);
         }
         if acts.len() != locs.len() {

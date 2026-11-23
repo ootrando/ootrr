@@ -743,7 +743,7 @@ pub const MENU: &[Page] = &[
         id: "starting",
         label: "Starting inventory",
         heading: RANDOMIZER,
-        sections: &[sec("Start", &["starting_hearts", "start_reward"]), sec("Songs", &["starting_songs"]), sec("Items", &["starting_items"])],
+        sections: &[sec("Start", &["starting_hearts", "heart_pool", "start_reward"]), sec("Songs", &["starting_songs"]), sec("Items", &["starting_items"])],
     },
     Page { id: "excluded", label: "Excluded locations", heading: RANDOMIZER, sections: &[sec("Excluded locations", &["disabled_locations"])] },
     Page {

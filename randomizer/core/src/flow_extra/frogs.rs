@@ -13,7 +13,7 @@ pub const PURPLE: &str = "Obj_Rupee_Purple";
 pub const SONGS: [&str; 5] = ["ZR Frogs Zeldas Lullaby", "ZR Frogs Eponas Song", "ZR Frogs Sarias Song", "ZR Frogs Suns Song", "ZR Frogs Song of Time"];
 pub const BUG: &str = "ZR Frogs Bug Game";
 
-pub const SONGS_NOTE: &str = "The Zora's River frogs give one shuffled item for the first time each of Zelda's Lullaby, Epona's Song, Saria's Song, the Sun's Song and the Song of Time is played to them, in place of the rupee payout. The Song of Storms Heart Piece is the ZR Frogs Ocarina Game check as before.";
+pub const SONGS_NOTE: &str = "The Zora's River frogs give one shuffled item for the first time each of Zelda's Lullaby, Epona's Song, Saria's Song, the Sun's Song and the Song of Time is played to them, in place of the rupee payout. The separately mapped ZR Frogs Ocarina Game reward is a check of its own.";
 pub const BUG_NOTE: &str = "The first win of the Zora's River frog bug game gives a shuffled item in place of the Heart Piece. Later wins still give the vanilla Blue Rupee.";
 
 pub fn is_song(name: &str) -> bool {

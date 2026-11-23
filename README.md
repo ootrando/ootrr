@@ -18,6 +18,10 @@ Longshot, the successor to Hookshot, also loads `mods/<name>/romfs` from the gam
 
 Starting items can include every weapon, tool, upgrade tier, bottle, boot, tunic, shield, the Gerudo card, magic, songs and the starting hearts. A new game starts with them and one copy of each leaves the item pool. Zelda's Letter is refused because it shares the child trade slot. The full Business Scrubs setting is still not applied. The one time and menu scrub sales have their own settings under Story and NPC rewards.
 
+Starting with fewer or more than three hearts adds or removes heart items in the shuffled pool. Choose pieces, containers, or a seeded random mix; pieces change in groups of four and a preferred type falls back to the other if necessary. Generation reports an error if too few heart or rupee checks are shuffled to make the adjustment. Some checks cannot yet be shuffled, so high starting-heart counts may require different settings or may not be possible.
+
+The Treasure Chest Game, frog bug game, and Death Mountain Crater scrub contribute their heart pieces to that pool only when their respective shuffle options are enabled. The Hyrule Field scrub and the Song of Storms frog reward follow Story and NPC rewards. Supported freestanding heart pieces are shuffled even when Freestanding items is Off; other unshuffled checks keep their vanilla rewards.
+
 New here? Follow the [full tutorial with screenshots](https://docs.google.com/document/d/19bxnx9MBVK9WNcX4B0JpQdvWd249YmhNvEfIP1zRMug/edit?usp=sharing), from installing to playing in Lichii.
 
 ## Your game folder

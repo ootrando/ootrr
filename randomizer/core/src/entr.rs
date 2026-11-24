@@ -92,6 +92,23 @@ mod tests {
     }
 
     #[test]
+    fn shuffled_hideout_keys_do_not_block_dungeon_entrances() {
+        for keys in ["any_dungeon", "keysanity"] {
+            let (_, failed): (usize, usize) = run(
+                &[
+                    (mode::SETTING, "dungeons"),
+                    ("gerudo_fortress", "open"),
+                    ("shuffle_hideoutkeys", keys),
+                    ("shuffle_chests", "all"),
+                ],
+                3,
+                &format!("hideout {keys}"),
+            );
+            assert_eq!(failed, 0, "{keys}");
+        }
+    }
+
+    #[test]
     fn the_setting_off_leaves_the_seed_file_without_entrances() {
         let d: Data = Data::load().unwrap();
         let g: Generated = generate_data(&d, &Settings::default(), "plain", &GenOpts::default()).unwrap();

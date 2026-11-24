@@ -758,6 +758,39 @@ pub fn build() -> Schema {
         Setting::toggle(crate::debug_names::NUM, crate::debug_names::SETTING, "world", "Show location names", false)
             .tip("For checking the location data. After an item get, a text box shows the internal name of the location the item came from, such as [KF Midos Top Left Chest]. Covers chests, NPC, song and event rewards, Gold Skulltulas and items on the ground. Items on the ground need a button press, and a placed item missing from the location list says so. Experimental."),
     );
+    s.push(
+        Setting::toggle(crate::key_rings::NUM, crate::key_rings::SETTING, "keys", "Key Rings", false)
+            .when_not("shuffle_smallkeys", "vanilla")
+            .tip("Replace the small keys of standard dungeons with one key ring per active dungeon. A ring gives every key of its dungeon when it is picked up. Rings can appear wherever small keys can, including pots, crates and flying pots. Use the options below to choose which dungeons are active. Off by default; only available when Small Key Shuffle is not Vanilla. Experimental, untested in the game."),
+    );
+    s.push(
+        Setting::choice(crate::key_rings::MODE_NUM, crate::key_rings::MODE_SETTING, "keys", "Key Ring Dungeons", "all")
+            .when_on(crate::key_rings::SETTING)
+            .tip("Which standard dungeons get key rings. Hideout keys are separate and are never included here.\n\nAll - Every standard key dungeon gets a ring, as before.\n\nCount - A seed-randomized set of the number you choose gets rings. Other dungeons keep individual small keys.\n\nSelection - You tick each standard dungeon yes or no.\n\nRandom - A seed-randomized number from 1 to 8, then a seed-randomized set of that many dungeons. Experimental, untested in the game.")
+            .opt("all", "All", "Every standard key dungeon gets a ring.")
+            .opt("count", "Count", "A seed-randomized set of the chosen number of dungeons gets rings.")
+            .opt("selection", "Selection", "Choose each standard dungeon individually.")
+            .opt("random", "Random", "A seed-randomized number and set of standard dungeons."),
+    );
+    s.push(
+        Setting::number(crate::key_rings::COUNT_NUM, crate::key_rings::COUNT_SETTING, "keys", "Key Ring Count", 8, 1, 8)
+            .when_on(crate::key_rings::SETTING)
+            .when(crate::key_rings::MODE_SETTING, "count")
+            .tip("How many standard dungeons get key rings in Count mode. The dungeons are chosen from the seed, not by order in this list. Inactive dungeons keep individual small keys and their normal placement rules. Experimental, untested in the game."),
+    );
+    s.push(
+        Setting::multi_default(crate::key_rings::SELECTION_NUM, crate::key_rings::SELECTION_SETTING, "keys", "Key Ring Selection", &crate::key_rings::CHOICE_IDS)
+            .when_on(crate::key_rings::SETTING)
+            .when(crate::key_rings::MODE_SETTING, "selection")
+            .opts(&crate::key_rings::CHOICES)
+            .tip("Which standard dungeons get key rings in Selection mode. Unticked dungeons keep individual small keys with their normal placement rules. Experimental, untested in the game."),
+    );
+    s.push(
+        Setting::toggle(crate::key_rings::HIDEOUT_NUM, crate::key_rings::HIDEOUT_SETTING, "keys", "Hideout Key Ring", false)
+            .when("shuffle_hideoutkeys", "keysanity")
+            .when("gerudo_fortress", "open")
+            .tip("When Gerudo Fortress Keys are Anywhere and the fortress starts Open, the four Thieves' Hideout keys become one Hideout key ring. This is a separate manual choice: it is not enabled by Key Rings and Hideout is never a target of Count, Selection or Random. Experimental, untested in the game."),
+    );
     s.push(starting_items());
     s.push(starting_songs());
     s.extend(difficulty());

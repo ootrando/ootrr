@@ -46,9 +46,20 @@ impl<'a> Search<'a> {
     }
 
     pub fn add(&mut self, i: ItemId, n: u32) {
+        let ring: Option<(ItemId, u32)> = self.w.ring_key(i);
         self.cnt[i] += n;
+        if let Some((key, count)) = ring {
+            self.cnt[key] += count * n;
+        }
         self.dirty = true;
         let w: &World = self.w;
+        if let Some((key, _)) = ring {
+            for s in &w.users[key] {
+                for a in 0..2 {
+                    self.push(a, *s as usize, false);
+                }
+            }
+        }
         for s in &w.users[i] {
             for a in 0..2 {
                 self.push(a, *s as usize, false);
@@ -59,6 +70,9 @@ impl<'a> Search<'a> {
     pub fn remove(&mut self, i: ItemId) {
         if self.cnt[i] > 0 {
             self.cnt[i] -= 1;
+            if let Some((key, count)) = self.w.ring_key(i) {
+                self.cnt[key] = self.cnt[key].saturating_sub(count);
+            }
         }
     }
 

@@ -8,7 +8,7 @@ use crate::search::{explore, Search};
 use crate::settings::seed::SeedFile;
 use crate::slice::data::Data;
 use crate::slice::edit::is_sale;
-use crate::slice::support::{plan, Plan};
+use crate::slice::support::{plan_with_seed, Plan};
 use crate::slice::tier_order::{fixed_actors, rank, slots, Give, Slot, Verdict};
 use crate::start_items::Set;
 use crate::world::{LocId, Placement, World};
@@ -180,7 +180,7 @@ fn prize_rows(d: &Data, seed: &SeedFile) -> Vec<Row> {
 
 pub fn census(d: &Data, seed: &SeedFile) -> Res<Vec<Row>> {
     let (w, place): (World, Placement) = crate::slice::starts::rebuild(d, seed)?;
-    let p: Plan = plan(&seed.settings()?.settings)?;
+    let p: Plan = plan_with_seed(&seed.settings()?.settings, Some(&seed.seed))?;
     let v: Verdict = fixed_actors(d, seed)?;
     let sl: Vec<Slot> = slots(d, &seed.placements);
     let wrapped: BM<String, &'static str> = crate::slice::flow_wrap::wraps(d, seed);
@@ -385,7 +385,7 @@ mod tests {
         ] {
             let mut s: Settings = Settings::default();
             s.set("starting_items", Value::set(&ids)).unwrap();
-            let p: Plan = plan(&s).unwrap();
+            let p: Plan = plan_with_seed(&s, None).unwrap();
             let rows: Vec<Row> = start_rows(&d, &p);
             let r: &Row = rows.iter().find(|r| r.family == fam).unwrap_or_else(|| panic!("{ids:?}"));
             println!("{ids:?}\t{}\t{}\tpouch {:?}", r.tier, r.risk, p.start.pouch);

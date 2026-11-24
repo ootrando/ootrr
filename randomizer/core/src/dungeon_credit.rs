@@ -3,7 +3,7 @@ use std::fmt::Write as W;
 use std::path::{Path as P, PathBuf as PB};
 
 use crate::bfevfl::flow::NONE;
-use crate::bfevfl::{Actor, Bf, Cont, Entry, Event, Flow, Kind, Val};
+use crate::bfevfl::{Actor, Bf, Case, Cont, Entry, Event, Flow, Kind, Val};
 use crate::byml::{Byml, Node};
 use crate::dungeon_text;
 use crate::error::{Error, Res};
@@ -43,6 +43,8 @@ pub const NATIVE: [&str; 4] = ["EventGetDungeonMap", "EventGetDungeonCompass", "
 pub const PLAIN: &str = "None";
 pub const SMALL_NATIVE: [&str; 1] = ["EventGetDungeonSmallKey"];
 pub const EVENT_PREFIX: &str = "OOTRR_Key_";
+pub const RING_EVENT_PREFIX: &str = "OOTRR_KeyRing_";
+const RING_ENTRY_PREFIX: &str = "Success_KeyRing_";
 pub const KEY_DUNGEONS: [&str; 8] = [
     "ForestTemple",
     "FireTemple",
@@ -56,6 +58,7 @@ pub const KEY_DUNGEONS: [&str; 8] = [
 pub const DROP: &str = "Drop__DropActor";
 pub const HOLDER: &str = "GameDataActor";
 const ADD: &str = "EventTriggerAddOrSubGameDataInt";
+const ASK_BOOL: &str = "EventQueryIsGameDataBool";
 pub const SET: &str = "EventTriggerSetGameDataBool";
 const ROOT_ENTRY: &str = "Success_";
 const PREFIX: &str = "Success_Key_";
@@ -85,6 +88,7 @@ pub fn key_dungeon(name: &str) -> Option<&'static str> {
         "Spirit Temple" => Some("SpiritTemple"),
         "Bottom of the Well" => Some("BottomOfTheWell"),
         "Gerudo Training Ground" => Some("GerudoTrainingGround"),
+        "Thieves Hideout" => Some("GerudoFortress"),
         "Ganons Castle" => Some("InsideGanonCastle"),
         _ => None,
     }
@@ -105,6 +109,18 @@ pub fn event_name(d: &str, size: Size) -> String {
         Size::Big => "Big",
     };
     format!("OOTRR_Key_{d}_{tag}")
+}
+
+pub fn ring_entry_name(d: &str) -> String {
+    format!("{RING_ENTRY_PREFIX}{d}")
+}
+
+pub fn ring_event_name(d: &str, size: Size) -> String {
+    let tag: &str = match size {
+        Size::Small => "Small",
+        Size::Big => "Big",
+    };
+    format!("{RING_EVENT_PREFIX}{d}_{tag}")
 }
 
 pub fn flag(d: &str, member: &str) -> String {
@@ -159,6 +175,16 @@ pub fn add_int(name: String) -> Cont {
             ("Index".to_string(), Val::Int(-1)),
             ("GameDataName".to_string(), Val::Str(name)),
             ("Value".to_string(), Val::Int(1)),
+        ],
+    }
+}
+
+fn add_count(name: String, count: u32) -> Cont {
+    Cont {
+        items: vec![
+            ("Index".to_string(), Val::Int(-1)),
+            ("GameDataName".to_string(), Val::Str(name)),
+            ("Value".to_string(), Val::Int(count as i32)),
         ],
     }
 }
@@ -319,6 +345,7 @@ pub fn sound(f: &Flow) -> Vec<String> {
 fn same_but_actions(a: &Actor, b: &Actor) -> bool {
     let mut x: Actor = b.clone();
     x.actions.truncate(a.actions.len());
+    x.queries.truncate(a.queries.len());
     x == *a && ADDED.contains(&b.name.as_str())
 }
 
@@ -362,6 +389,9 @@ pub fn audit(a: &Flow, b: &Flow) -> Vec<String> {
                 _ => false,
             }),
             Kind::Sub { flow, entry, .. } => flow.is_empty() && entry == ROOT_ENTRY,
+            Kind::Switch { actor, query, .. } => b.actors.get(*actor as usize).is_some_and(|x| {
+                x.name == HOLDER && x.queries.get(*query as usize).is_some_and(|q| q == ASK_BOOL)
+            }),
             _ => false,
         };
         if !fine {
@@ -374,7 +404,9 @@ pub fn audit(a: &Flow, b: &Flow) -> Vec<String> {
         }
     }
     for y in &b.entries[a.entries.len()..] {
-        if !y.name.strip_prefix(PREFIX).is_some_and(|d| DUNGEONS.contains(&d)) {
+        let key: bool = y.name.strip_prefix(PREFIX).is_some_and(|d| DUNGEONS.contains(&d));
+        let ring: bool = y.name.strip_prefix(RING_ENTRY_PREFIX).is_some_and(|d| crate::key_rings::by_folder_any(d).is_some());
+        if !key && !ring {
             bad.push(format!("entry {} was added", y.name));
         }
     }
@@ -390,6 +422,67 @@ pub fn credit_keys(f: &mut Flow, dungeons: &[&str], big: bool) -> Res<usize> {
         return Err(Error::Msg(format!("dungeon credit: the chest flow is broken after the key entries, {m}")));
     }
     Ok(n)
+}
+
+fn give_ring(next: u16, actor: &str) -> Kind {
+    let c: Cont = Cont {
+        items: vec![
+            ("ContentName".to_string(), Val::Str(actor.to_string())),
+            ("IsMiniGame".to_string(), Val::Bool(0)),
+        ],
+    };
+    Kind::Sub { next, params: Some(c), flow: String::new(), entry: ROOT_ENTRY.to_string() }
+}
+
+
+
+
+
+
+pub fn ring_credit(f: &mut Flow, r: &'static crate::key_rings::Ring) -> Res<()> {
+    let name: String = ring_entry_name(r.folder);
+    if f.entries.iter().any(|e| e.name == name) {
+        return Ok(());
+    }
+    let pad: u16 = f
+        .entries
+        .iter()
+        .find(|e| e.name == ROOT_ENTRY)
+        .map(|e| e.pad)
+        .ok_or(Error::Format("dungeon credit: the chest flow has no Success_ entry"))?;
+    let (a, add): (u16, u16) = action_slot(f, HOLDER, ADD)?;
+    let (_, set): (u16, u16) = action_slot(f, HOLDER, SET)?;
+    let (t, say): (u16, u16) = action_slot(f, TALKER, TALK)?;
+    let (qowner, query): (u16, u16) = crate::start_state::query_slot(f, HOLDER, ASK_BOOL)?;
+    let applied: String = crate::key_rings::applied_flag(r.folder);
+
+    let given: u16 = push(f, Kind::Action { next: NONE, actor: t, act: say, params: Some(talk(crate::dungeon_text::message_id(r.folder))) })?;
+    let marked: u16 = push(f, Kind::Action { next: given, actor: a, act: set, params: Some(set_bool(applied.clone())) })?;
+    let once: u16 = push(f, Kind::Action { next: marked, actor: a, act: set, params: Some(set_bool(flag(r.folder, "IsGetSmallKeyOnce"))) })?;
+    let total: u16 = push(f, Kind::Action { next: once, actor: a, act: add, params: Some(add_count(flag(r.folder, "SmallKeyTotalNum"), r.count)) })?;
+    let num: u16 = push(f, Kind::Action { next: total, actor: a, act: add, params: Some(add_count(flag(r.folder, "SmallKeyNum"), r.count)) })?;
+    let params: Cont = Cont { items: vec![("GameDataName".to_string(), Val::Str(applied)), ("Index".to_string(), Val::Int(-1))] };
+    let asked: u16 = push(f, Kind::Switch {
+        actor: qowner,
+        query,
+        cases: vec![Case { val: 0, ev: NONE }, Case { val: 1, ev: num }],
+        params: Some(params),
+    })?;
+    let sub: u16 = push(f, give_ring(asked, r.actor))?;
+    f.entries.push(Entry { name, subs: vec![sub], vars: Vec::new(), main: sub, pad });
+    Ok(())
+}
+
+
+pub fn credit_rings(f: &mut Flow, folders: &[&'static str]) -> Res<()> {
+    for folder in folders {
+        let r: &'static crate::key_rings::Ring = crate::key_rings::by_folder_any(folder).ok_or_else(|| Error::Msg(format!("{folder} has no key ring")))?;
+        ring_credit(f, r)?;
+    }
+    if let Some(m) = sound(f).first() {
+        return Err(Error::Msg(format!("dungeon credit: the chest flow is broken after the ring entries, {m}")));
+    }
+    Ok(())
 }
 
 pub fn sweep(y: &mut Byml, file: &str) -> Res<usize> {
@@ -410,11 +503,19 @@ pub fn sweep_except(y: &mut Byml, file: &str, skip: &BS<u64>) -> Res<usize> {
         let Some(d) = a.get_mut("Dynamic") else {
             continue;
         };
-        if text(d, DROP) != KEY || text(d, "GetEventName").starts_with(EVENT_PREFIX) {
+        let drop: &str = text(d, DROP);
+        let ring: Option<&'static crate::key_rings::Ring> = crate::key_rings::by_actor_any(drop);
+        if (drop != KEY && ring.is_none()) || text(d, "GetEventName").starts_with(EVENT_PREFIX) || text(d, "GetEventName").starts_with(RING_EVENT_PREFIX) {
             continue;
         }
-        let dungeon: &str = scene.ok_or_else(|| Error::Msg(format!("{file} has a chest with a small key but is not a dungeon scene this build knows")))?;
-        d.set("GetEventName", Node::Str(event_name(dungeon, size)));
+        let event: String = match ring {
+            Some(r) => ring_event_name(r.folder, size),
+            None => {
+                let dungeon: &str = scene.ok_or_else(|| Error::Msg(format!("{file} has a chest with a small key but is not a dungeon scene this build knows")))?;
+                event_name(dungeon, size)
+            }
+        };
+        d.set("GetEventName", Node::Str(event));
         n += 1;
     }
     Ok(n)
@@ -431,7 +532,7 @@ pub fn stage_pouch(rf: &mut Romfs, roam: bool) -> Res<Out> {
     })
 }
 
-pub fn edit_flow(raw: &[u8], dungeons: &[&str], native: bool) -> Res<(Vec<u8>, usize)> {
+pub fn edit_flow(raw: &[u8], dungeons: &[&str], rings: &[&'static str], native: bool) -> Res<(Vec<u8>, usize)> {
     let orig: Bf = Bf::parse(raw)?;
     let mut b: Bf = orig.clone();
     let before: &Flow = orig.flows.first().ok_or(Error::Format("dungeon credit: the flow file holds no flow"))?;
@@ -440,6 +541,7 @@ pub fn edit_flow(raw: &[u8], dungeons: &[&str], native: bool) -> Res<(Vec<u8>, u
     for d in dungeons {
         credit(f, d)?;
     }
+    credit_rings(f, rings)?;
     let bad: Vec<String> = audit(before, f);
     if let Some(m) = bad.first() {
         return Err(Error::Msg(format!("dungeon credit: the edited flow fails its audit, {m} ({} problems)", bad.len())));
@@ -501,13 +603,19 @@ pub fn place(y: &mut Byml, hash: u64, d: &str) -> Option<Size> {
     edit_chest(y, hash, KEY, &event_name(d, size))
 }
 
-pub fn stage(rf: &mut Romfs, dungeons: &BS<&'static str>, counted: &BS<&str>) -> Res<(Vec<Out>, usize)> {
+pub fn stage(rf: &mut Romfs, dungeons: &BS<&'static str>, rings: &[&'static str], counted: &BS<&str>) -> Res<(Vec<Out>, usize)> {
     let ds: Vec<&str> = dungeons.iter().copied().collect();
+    let mut text_ds: Vec<&str> = ds.clone();
+    for d in rings {
+        if !text_ds.contains(d) {
+            text_ds.push(d);
+        }
+    }
     let mut outs: Vec<Out> = Vec::new();
     let mut skipped: usize = 0;
     for (path, native) in [(BIG_FLOW, true), (SMALL_FLOW, false)] {
         outs.push(rewrite(rf, path, |raw: &[u8]| {
-            let (b, n): (Vec<u8>, usize) = edit_flow(raw, &ds, native)?;
+            let (b, n): (Vec<u8>, usize) = edit_flow(raw, &ds, rings, native)?;
             skipped += n;
             Ok(b)
         })?);
@@ -517,8 +625,9 @@ pub fn stage(rf: &mut Romfs, dungeons: &BS<&'static str>, counted: &BS<&str>) ->
         outs.push(rewrite(rf, table, |raw: &[u8]| {
             let mut y: Byml = Byml::parse(raw)?;
             for size in [Size::Small, Size::Big] {
-                let rows: Vec<(String, Option<String>)> =
+                let mut rows: Vec<(String, Option<String>)> =
                     ds.iter().map(|d| (event_name(d, size), if analyzed { None } else { Some(entry_name(d)) })).collect();
+                rows.extend(rings.iter().map(|d| (ring_event_name(d, size), if analyzed { None } else { Some(ring_entry_name(d)) })));
                 add_rows(&mut y, size.template(), &rows)?;
             }
             y.write()
@@ -531,7 +640,7 @@ pub fn stage(rf: &mut Romfs, dungeons: &BS<&'static str>, counted: &BS<&str>) ->
     })?);
     for l in languages(rf)? {
         let english: bool = dungeon_text::is_english(&l);
-        outs.push(rewrite(rf, &l, |raw: &[u8]| dungeon_text::apply(raw, &ds, counted, english))?);
+        outs.push(rewrite(rf, &l, |raw: &[u8]| dungeon_text::apply(raw, &text_ds, counted, english))?);
     }
     Ok((outs, skipped))
 }
@@ -593,7 +702,7 @@ pub fn build(romfs: &P, load: &P, name: &str, plans: &[(u64, Option<String>)], o
         }
         counted.insert(d);
     }
-    let (staged, skipped): (Vec<Out>, usize) = stage(&mut rf, &used, &counted)?;
+    let (staged, skipped): (Vec<Out>, usize) = stage(&mut rf, &used, &[], &counted)?;
     outs.extend(staged);
     let c: Committed = commit(&mut rf, load, name, &outs, o.rst_from.as_ref())?;
     let mut report: String = c.report;
@@ -735,6 +844,64 @@ mod tests {
     }
 
     #[test]
+    fn a_ring_chest_gives_the_ring_before_it_credits_and_the_guard_runs_on_false() {
+        let r: &'static crate::key_rings::Ring = crate::key_rings::by_folder("ForestTemple").unwrap();
+        let mut f: Flow = small();
+        ring_credit(&mut f, r).unwrap();
+        assert!(audit(&small(), &f).is_empty());
+
+        let e: &Entry = &f.entries[1];
+        assert_eq!((e.name.as_str(), e.subs.clone()), (ring_entry_name(r.folder).as_str(), vec![e.main]));
+        let sub: usize = e.main as usize;
+        let Kind::Sub { next, flow, entry, .. } = &f.events[sub].kind else { panic!("expected the ring get sub") };
+        assert_eq!((flow.as_str(), entry.as_str()), ("", ROOT_ENTRY));
+        assert_eq!(param(&f.events[sub], "ContentName"), Some(&Val::Str(r.actor.to_string())));
+
+        let guard: usize = *next as usize;
+        let Kind::Switch { cases, .. } = &f.events[guard].kind else { panic!("expected the applied flag guard") };
+        assert_eq!(cases.iter().find(|c| c.val == 0).unwrap().ev, NONE, "an applied flag skips credit");
+        let mut at: usize = cases.iter().find(|c| c.val == 1).unwrap().ev as usize;
+
+        let mut order: Vec<String> = Vec::new();
+        for _ in 0..f.events.len() {
+            let Kind::Action { next, params, .. } = &f.events[at].kind else { panic!("expected a credit action") };
+            if let Some(c) = params {
+                if let Some(Val::Str(name)) = c.get("GameDataName") {
+                    order.push(name.clone());
+                } else if let Some(Val::Str(id)) = c.get("MessageId") {
+                    order.push(id.clone());
+                }
+            }
+            if *next == NONE {
+                break;
+            }
+            at = *next as usize;
+        }
+        assert_eq!(
+            order,
+            vec![
+                format!("DungeonInfo.{}.SmallKeyNum", r.folder),
+                format!("DungeonInfo.{}.SmallKeyTotalNum", r.folder),
+                format!("DungeonInfo.{}.IsGetSmallKeyOnce", r.folder),
+                crate::key_rings::applied_flag(r.folder),
+                crate::dungeon_text::message_id(r.folder).to_string(),
+            ],
+            "the ring is gotten first, then keys are written, then the count is spoken"
+        );
+    }
+
+    #[test]
+    fn the_hideout_ring_chest_uses_the_gerudo_fortress_credit() {
+        let r: &'static crate::key_rings::Ring = &crate::key_rings::HIDEOUT_RING;
+        let mut f: Flow = small();
+        ring_credit(&mut f, r).unwrap();
+        assert!(audit(&small(), &f).is_empty());
+        let e: &Entry = f.entries.iter().find(|e| e.name == ring_entry_name(r.folder)).unwrap();
+        assert_eq!(param(&f.events[e.main as usize], "ContentName"), Some(&Val::Str(r.actor.to_string())));
+        assert!(f.events.iter().any(|e| matches!(&e.kind, Kind::Action { params: Some(c), .. } if c.get("GameDataName") == Some(&Val::Str(format!("DungeonInfo.{}.SmallKeyNum", r.folder))))));
+    }
+
+    #[test]
     fn a_flow_without_the_holder_gets_one() {
         let mut f: Flow = small();
         f.actors.pop();
@@ -802,16 +969,16 @@ mod tests {
     #[test]
     fn the_edited_file_parses_back_and_is_stable() {
         let raw: Vec<u8> = bf(big()).write().unwrap();
-        let (out, n): (Vec<u8>, usize) = edit_flow(&raw, &["ForestTemple", "SpiritTemple"], true).unwrap();
+        let (out, n): (Vec<u8>, usize) = edit_flow(&raw, &["ForestTemple", "SpiritTemple"], &[], true).unwrap();
         assert_eq!(n, 4);
         let b: Bf = Bf::parse(&out).unwrap();
         assert_eq!(b.flows[0].entries.len(), 3);
         assert_eq!(b.flows[0].events.len(), 19);
         assert_eq!(b.flows[0].actors[2].actions, vec![ADD.to_string(), SET.to_string()]);
         assert_eq!((b.flows[0].actors[3].name.as_str(), b.flows[0].actors[3].actions.clone()), (TALKER, vec![TALK.to_string()]));
-        let (again, m): (Vec<u8>, usize) = edit_flow(&out, &["ForestTemple", "SpiritTemple"], true).unwrap();
+        let (again, m): (Vec<u8>, usize) = edit_flow(&out, &["ForestTemple", "SpiritTemple"], &[], true).unwrap();
         assert_eq!((again, m), (out, 0));
-        assert!(edit_flow(&raw, &["Market"], true).is_err());
+        assert!(edit_flow(&raw, &["Market"], &[], true).is_err());
     }
 
     fn row(id: &str, deal: &str) -> Node {
@@ -971,7 +1138,7 @@ mod tests {
     #[test]
     fn item_dungeon_names_map_to_the_key_counts_and_scenes() {
         assert_eq!(key_dungeon("Ganons Castle"), Some("InsideGanonCastle"));
-        assert_eq!(key_dungeon("Thieves Hideout"), None);
+        assert_eq!(key_dungeon("Thieves Hideout"), Some("GerudoFortress"));
         assert_eq!(scene_dungeon("Banc/InsideGanonCastle/x.bcett.byml.zs"), Some("InsideGanonCastle"));
         assert_eq!(scene_dungeon("Banc/GanonCastle/x.bcett.byml.zs"), None);
         assert!(KEY_DUNGEONS.iter().all(|d| DUNGEONS.contains(d)));

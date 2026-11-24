@@ -5,7 +5,7 @@ use crate::error::Res;
 use crate::romfs::Romfs;
 use crate::settings::seed::SeedFile;
 use crate::slice::data::Data;
-use crate::slice::support::{Plan, Songs};
+use crate::slice::support::{Keep, Plan, Songs};
 use crate::staging::Out;
 
 pub struct Ctx<'a> {
@@ -26,12 +26,13 @@ pub struct Ctx<'a> {
 
 pub type Stage = fn(&mut Romfs, &Ctx, &mut Vec<Out>) -> Res<()>;
 
-pub const STAGES: [(&str, Stage); 27] = [
+pub const STAGES: [(&str, Stage); 30] = [
     ("boss heart chests", boss_hearts),
     ("songs", songs),
     ("song models", song_models),
     ("hints", hints),
     ("dungeon item text", dungeon_text),
+    ("key ring text", key_ring_text),
     ("scrub hint text", scrub_hints),
     ("fairy price text", fairy_text),
     ("silver rupee text", silver_text),
@@ -50,6 +51,8 @@ pub const STAGES: [(&str, Stage); 27] = [
     ("starting items", start_items),
     ("dpad items", dpad),
     ("pot rows", pot_rows),
+    ("hideout drop rows", hideout_drop_rows),
+    ("key ring flags", key_ring_flags),
     ("start defaults", start_defaults),
     ("scrub rows", scrub_rows),
     ("debug location names", debug_names),
@@ -100,6 +103,13 @@ fn dungeon_text(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
     crate::dungeon_packs::stage_text(rf, more, &crate::dungeon_packs::placed(c.d, c.seed))
 }
 
+fn key_ring_text(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
+    if c.p.rings || c.p.hideout_ring {
+        crate::key_ring_text::stage(rf, c.work, more, &c.p.all_rings())?;
+    }
+    Ok(())
+}
+
 fn scrub_hints(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
     crate::scrub_prices::stage_text(rf, c.d, c.seed, c.p.rewards.scrub_hint, more)
 }
@@ -133,8 +143,8 @@ fn door_fix(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
     Ok(())
 }
 
-fn no_tutorials(rf: &mut Romfs, _: &Ctx, more: &mut Vec<Out>) -> Res<()> {
-    more.push(crate::no_tutorials::stage(rf)?);
+fn no_tutorials(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
+    more.push(crate::no_tutorials::stage(rf, c.p.rings || c.p.hideout_ring)?);
     Ok(())
 }
 
@@ -219,6 +229,14 @@ fn pot_rows(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
         more.push(crate::pot_slice::kf_ring::stage(rf)?);
     }
     crate::pot_slice::rows::stage(rf, more, c.pots)
+}
+
+fn hideout_drop_rows(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
+    crate::hideout_keys::stage_rows(rf, more, c.p.hideout != Keep::Vanilla)
+}
+
+fn key_ring_flags(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
+    crate::key_ring_credit::stage_rows(rf, more, &c.p.all_rings())
 }
 
 fn start_defaults(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {

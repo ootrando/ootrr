@@ -15,7 +15,7 @@ use crate::slice::logic::world_with;
 use crate::slice::pick::{pick, scoped, Pick};
 use crate::slice::pickups as pu;
 use crate::slice::plando::{loc_of, resolve, Entry};
-use crate::slice::support::{plan, Keep, Plan, Songs};
+use crate::slice::support::{plan, plan_with_seed, Keep, Plan, Songs};
 use crate::slice::watch::{Live, Watch};
 use crate::spoiler::{playthrough, Spoiler};
 use crate::world::{LocId, Placement, World};
@@ -108,7 +108,18 @@ pub fn allowed(d: &Data, w: &World, p: &Plan, it: ItemId, l: LocId) -> bool {
     if !buildable(d, w, p, it, l) {
         return false;
     }
+    if let Some(ok) = crate::slice::place_rules::verdict(&spot) {
+        return ok;
+    }
     let here: Option<&str> = w.regions[w.locs[l].region].dungeon.as_deref();
+    if let Some(r) = crate::key_rings::by_item(&w.items.names[it]) {
+        return match p.keys.small {
+            Keep::Dungeon => here == Some(r.dungeon),
+            Keep::AnyDungeon => here.is_some(),
+            Keep::Vanilla => false,
+            Keep::Anywhere | Keep::Overworld | Keep::Regional | Keep::Start | Keep::Lacs => true,
+        };
+    }
     if scoped(p, &i.kind) {
         return i.dungeon.is_some() && i.dungeon.as_deref() == here;
     }
@@ -250,8 +261,23 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         return Err(E::Format("the chest list in data/slice.json is empty, run slice-scan first"));
     }
     let watch: Watch = Watch::new(o.limit, o.live.clone());
-    let mut p: Plan = plan(s)?;
+    let mut p: Plan = plan_with_seed(s, Some(seed))?;
     p.notes.extend(p.trials.note());
+
+
+
+    let mut logic: Vec<(&'static str, &'static str)> = p.logic();
+    let mut xs: Vec<&'static crate::key_rings::Ring> = Vec::new();
+    if p.rings {
+        for e in &o.plando {
+            if let Some(r) = crate::key_rings::by_item(&e.item) {
+                logic.push((r.select, "true"));
+                if !p.active_rings.contains(&r) && !xs.contains(&r) {
+                    xs.push(r);
+                }
+            }
+        }
+    }
     let room: crate::shops::layout::Room = crate::shops::rules::room(d, &p)?;
     let forced: Vec<String> = o.plando.iter().map(|e| e.location.clone()).collect();
     let mut lay: Option<crate::shops::Layout> = crate::shops::layout::of_with(&p.shops, seed, room, &forced)?;
@@ -259,8 +285,8 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     let owned: Option<Data> = lay.as_ref().map(|l| crate::shops::logic::data_with(d, l)).transpose()?;
     let d: &Data = owned.as_ref().unwrap_or(d);
     let mut w: World = match &lay {
-        Some(l) => crate::shops::logic::world(d, &p.logic(), l)?,
-        None => world_with(d, &p.logic())?,
+        Some(l) => crate::shops::logic::world(d, &logic, l)?,
+        None => world_with(d, &logic)?,
     };
     let mut named: Vec<String> = Vec::with_capacity(p.excluded.len());
     for e in &p.excluded {
@@ -294,6 +320,13 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     let pooled: Placement = restore_upgrades(&w, d, &vanilla, &pk.free, &|it: ItemId, l: LocId| allowed(d, &w, &p, it, l));
     let (mut base, gone): (Placement, Vec<String>) = crate::start_items::pool::base(d, &w, &p, &pooled, &pk.free)?;
     p.notes.extend(gone);
+    let mut ns: Vec<String> = Vec::new();
+    {
+        let ok = |it: ItemId, l: LocId| allowed(d, &w, &p, it, l);
+        crate::slice::rings::replace_with(d, &w, &p, &mut base, &pk.free, &ok, &mut ns, &xs)?;
+        crate::slice::rings::replace_hideout(d, &w, &p, &mut base, &pk.free, &ok, &mut ns)?;
+    }
+    p.notes.extend(ns);
     if p.rewards.trade_items {
         let n: Vec<String> = crate::open_world::trade_shuffle::pool(d, &w, &pk.free, &mut base)?;
         p.notes.extend(n);
@@ -320,6 +353,8 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
             && !d.item(&w.items.names[i]).is_some_and(|x| crate::slice::dungeon_items::exempt(&p, &x.kind))
             && !(lay.is_some() && crate::shops::is_loc(&w.locs[*l].name))
             && !(p.silver && crate::slice::silver::is_spot(&w.locs[*l].name))
+
+            && !crate::hideout_keys::is_native(&w.locs[*l].name)
             // The Light Arrows Cutscene holds Ganon's Boss Key in this mode; its Light Arrows join the pool.
             && !(p.keys.ganon == Keep::Lacs && w.locs[*l].name == crate::lacs_key::LOC)
         {
@@ -366,7 +401,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         loop {
             let quick: bool = p.songs == Songs::Anywhere && redo + 1 < crate::slice::song_spots::TRIES;
             let (tries, switch): (u32, u32) = if quick { (o.tries.min(crate::slice::song_spots::QUICK_TRIES), o.switch.min(crate::slice::song_spots::QUICK_SWITCH)) } else { (o.tries, o.switch) };
-            let g: Placement = match fill_ordered(&w, &base, &pk.free, ok, order, &mut rng, tries, &fixed, p.strict_layouts().is_empty() && gates.is_none(), r, reach, switch, &watch) {
+            let g: Placement = match fill_ordered(&w, &base, &pk.free, ok, order, &mut rng, tries, &fixed, p.strict_layouts().is_empty() && p.hideout == Keep::Vanilla && gates.is_none(), r, reach, switch, &watch) {
                 Ok(g) => g,
                 // A run out of time (or cancelled) stops here with that message, not a retry's.
                 Err(_) if quick && watch.check().is_ok() => {
@@ -580,6 +615,53 @@ mod tests {
     }
 
     #[test]
+    fn key_ring_count_and_random_modes_generate_with_matching_build_plans() {
+        use crate::key_rings;
+
+        let d: Data = Data::load().unwrap();
+        let seed: &str = "key ring smoke seed";
+        for mode in ["count", "random"] {
+            let mut s: Settings = all_chests();
+            s.set("shuffle_smallkeys", Value::s("keysanity")).unwrap();
+            s.set(key_rings::SETTING, Value::Bool(true)).unwrap();
+            s.set(key_rings::MODE_SETTING, Value::s(mode)).unwrap();
+            if mode == "count" {
+                s.set(key_rings::COUNT_SETTING, Value::Int(3)).unwrap();
+            }
+            let expected: Vec<&'static key_rings::Ring> = if mode == "count" {
+                key_rings::count(seed, 3)
+            } else {
+                key_rings::random(seed).1
+            };
+            let a: Plan = plan_with_seed(&s, Some(seed)).unwrap();
+            assert_eq!(a.active_rings, expected, "{mode}");
+
+            let o: GenOpts = GenOpts { tries: 40, ..GenOpts::default() };
+            let g: Generated = generate_data(&d, &s, seed, &o).unwrap_or_else(|e| panic!("{mode}: {e}"));
+            let loaded: crate::settings::Loaded = g.seed_file.settings().unwrap();
+            let b: Plan = plan_with_seed(&loaded.settings, Some(&g.seed_file.seed)).unwrap();
+            assert_eq!(b.ring_mode, a.ring_mode, "{mode}");
+            assert_eq!(b.ring_count, a.ring_count, "{mode}");
+            assert_eq!(b.active_rings, expected, "{mode}");
+            assert_eq!(loaded.settings.text(key_rings::MODE_SETTING).unwrap(), mode);
+            assert!(g.report.contains("seed-randomized standard dungeons"), "{mode}: {}", g.report);
+
+            for r in &key_rings::RINGS {
+                let active: bool = expected.iter().any(|x| x.item == r.item);
+                let rings: usize = g.seed_file.placements.values().filter(|v| v.as_str() == r.item).count();
+                let keys: usize = g.seed_file.placements.values().filter(|v| v.as_str() == r.key).count();
+                if active {
+                    assert_eq!(rings, 1, "{}: {rings} ring placements", r.dungeon);
+                    assert_eq!(keys, 0, "{}: {keys} key placements", r.dungeon);
+                } else {
+                    assert_eq!(rings, 0, "{}: {rings} ring placements", r.dungeon);
+                    assert!(keys > 0, "{}: inactive dungeon lost its small keys", r.dungeon);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn verified_event_chests_are_part_of_the_pool() {
         let d: Data = Data::load().unwrap();
         let g: Generated = generate_data(&d, &Settings::default(), "events", &GenOpts::default()).unwrap();
@@ -700,6 +782,75 @@ mod tests {
                     let here: Option<&str> = w.regions[w.locs[w.loc(loc).unwrap()].region].dungeon.as_deref();
                     assert_eq!(here, i.dungeon.as_deref(), "{item} at {loc}");
                 }
+            }
+        }
+    }
+
+    fn rings_settings(mode: &str) -> Settings {
+        let mut s: Settings = with(&[("shuffle_chests", "all"), ("shuffle_smallkeys", mode)]);
+        s.set(crate::key_rings::SETTING, Value::Bool(true)).unwrap();
+        s.set(crate::key_rings::MODE_SETTING, Value::s("all")).unwrap();
+        s
+    }
+
+    #[test]
+    fn key_rings_follow_the_small_key_scope() {
+        let d: Data = Data::load().unwrap();
+        for mode in ["dungeon", "any_dungeon", "keysanity"] {
+            let s: Settings = rings_settings(mode);
+            let p: Plan = plan(&s).unwrap();
+            let w: World = world_with(&d, &p.logic()).unwrap();
+            for n in 0..3 {
+                let g: Generated = generate_data(&d, &s, &format!("ring scope {mode} {n}"), &GenOpts::default()).unwrap();
+                assert!(rebuilt(&d, &p, &g.seed_file.placements), "{mode} {n} is not beatable");
+                for (loc, item) in &g.seed_file.placements {
+                    let Some(r) = crate::key_rings::by_item(item) else {
+                        continue;
+                    };
+                    let l: LocId = w.loc(loc).unwrap();
+                    let here: Option<&str> = w.regions[w.locs[l].region].dungeon.as_deref();
+                    match mode {
+                        "dungeon" => assert_eq!(here, Some(r.dungeon), "{item} at {loc}"),
+                        "any_dungeon" => assert!(here.is_some(), "{item} at {loc} is outside a dungeon"),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn key_rings_are_reachable_without_their_own_keys() {
+        let d: Data = Data::load().unwrap();
+        let s: Settings = rings_settings("keysanity");
+        let p: Plan = plan(&s).unwrap();
+        let w: World = world_with(&d, &p.logic()).unwrap();
+        for n in 0..3 {
+            let g: Generated = generate_data(&d, &s, &format!("ring reach {n}"), &GenOpts::default()).unwrap();
+            for (loc, item) in &g.seed_file.placements {
+                let Some(r) = crate::key_rings::by_item(item) else {
+                    continue;
+                };
+                let l: LocId = w.loc(loc).unwrap();
+                let mut without: Placement = vanilla_place(&w, &d).unwrap();
+                for i in 0..without.item.len() {
+                    let clear: bool = without.item[i].is_some_and(|held| {
+                        let name: &str = &w.items.names[held];
+                        name == r.key || crate::key_rings::by_item_any(name) == Some(r)
+                    });
+                    if clear {
+                        without.item[i] = None;
+                    }
+                }
+                for (other, held) in &g.seed_file.placements {
+                    let grants: bool = held == r.key || crate::key_rings::by_item_any(held) == Some(r);
+                    if !grants {
+                        without.put(w.loc(other).unwrap(), w.item(held).unwrap());
+                    }
+                }
+                let mut search: crate::search::Search = crate::search::Search::new(&w);
+                search.settle(&without, true);
+                assert!(search.loc_access(l), "{item} at {loc} needs its own key");
             }
         }
     }

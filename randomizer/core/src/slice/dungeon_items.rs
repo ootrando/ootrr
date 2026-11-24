@@ -637,7 +637,6 @@ mod tests {
         let out: std::path::PathBuf = b.root.join("romfs");
         let mut rf: crate::romfs::Romfs = crate::romfs::Romfs::open(root).unwrap();
         let mut away: usize = 0;
-        let shared: std::collections::BTreeMap<(String, u64), u64> = crate::slice::copies::shared(&d, &g.seed_file.placements);
         for (loc, item) in &g.seed_file.placements {
             let Some(i) = d.item(item).filter(|i| Kind::of(&i.kind).is_some_and(|k| gr.sweep.contains(&k))) else {
                 continue;
@@ -658,7 +657,7 @@ mod tests {
                 for f in &r.files {
                     let old: Byml = Byml::parse(&rf.read_zs(f).unwrap()).unwrap();
                     let new: Byml = Byml::parse(&rf.zs.decompress(&std::fs::read(out.join(f)).unwrap()).unwrap()).unwrap();
-                    let a: &crate::byml::Node = actor(&new, shared.get(&(f.clone(), r.hash)).copied().unwrap_or(r.hash)).unwrap_or_else(|| panic!("{loc}: no chest {} in {f}", r.hash));
+                    let a: &crate::byml::Node = actor(&new, r.hash).unwrap();
                     // The vanilla chest may have no drop field yet (slice::banc::DEFAULT_DROPS).
                     let v: &crate::byml::Node = old.root.get("Actors").and_then(|l| l.as_arr()).and_then(|l| l.iter().find(|a| crate::placement::hash_of(a) == Some(r.hash))).unwrap();
                     let size: Size = Size::of_gyaml(a.get("Gyaml").and_then(|x| x.as_str()).unwrap_or(""));

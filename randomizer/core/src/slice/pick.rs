@@ -189,6 +189,7 @@ pub fn pick(d: &Data, w: &World, p: &Plan) -> Pick {
         }
     }
     pu::select(d, w, p, &mut free, &mut left, &mut flow);
+    crate::gerudo_drops::add_checks(w, p, &mut free, &mut left);
     flow += crate::pot_slice::pick::add(d, w, p, &mut free, &mut left);
     let (sk, n): (Vec<LocId>, usize) = crate::slice::skulls::pick(d, w, p, &mut left);
     free.extend(sk);

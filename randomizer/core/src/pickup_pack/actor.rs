@@ -12,6 +12,10 @@ pub const ANIM_REF: &str = "AnimationRef";
 pub const AS_REF: &str = "ASRef";
 pub const AS_INFO_REF: &str = "ASInfoRef";
 pub const POUCH_REF: &str = "PouchContentRef";
+pub const EVENT_REF: &str = "EventPerformerRef";
+
+
+pub const EVENT_BASE: &str = "Item_EventObject_Base";
 pub const ATTENTION_REF: &str = "AttentionSenderRef";
 pub const POUCH_ACTOR: &str = "PouchActor";
 pub const FIRST_CHECK: &str = "IsCountCheckOnFirstGet";
@@ -61,6 +65,17 @@ pub fn pouch_file(name: &str) -> String {
     format!("Component/PouchContentParam/{name}.game__component__PouchContentParam.bgyml")
 }
 
+
+pub fn model_file(name: &str) -> String {
+    format!("Component/ModelInfo/{name}.engine__component__ModelInfo.bgyml")
+}
+
+
+
+pub fn event_file(name: &str) -> String {
+    format!("Component/EventPerformerParam/{name}.engine__component__EventPerformerParam.bgyml")
+}
+
 fn need<'a>(c: &'a Chain, who: &str, k: &str) -> Res<&'a str> {
     c.comps.get(k).map(|s| s.as_str()).ok_or_else(|| E::Msg(format!("{who} has no {k}, this template cannot carry it")))
 }
@@ -88,11 +103,12 @@ pub fn fits(p: &Pool, s: &Spec) -> Res<Vec<String>> {
 }
 
 pub fn fits_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Vec<String>> {
-    let item: Chain = chain(p, &s.item)?;
+    let source: &str = s.source();
+    let item: Chain = chain(p, source)?;
     let donor: Chain = chain(p, DONOR)?;
     let mut bad: Vec<String> = Vec::new();
     if item.files.contains(&actor_file(BASE)) {
-        bad.push(format!("{} is already a world pickup", s.item));
+        bad.push(format!("{source} is already a world pickup"));
     }
     if let Some(m) = &l.model {
         if let Err(e) = model::model_ref(p, m) {
@@ -100,8 +116,8 @@ pub fn fits_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Vec<String>> {
         }
         for k in [NAME_REF, POUCH_REF] {
             match item.comps.get(k) {
-                None => bad.push(format!("{} has no {k}", s.item)),
-                Some(v) if k != NAME_REF && held(p, &s.item, k, v).is_err() => bad.push(format!("{} keeps its {k} outside its pack", s.item)),
+                None => bad.push(format!("{source} has no {k}")),
+                Some(v) if k != NAME_REF && held(p, source, k, v).is_err() => bad.push(format!("{source} keeps its {k} outside its pack")),
                 Some(_) => {}
             }
         }
@@ -109,13 +125,13 @@ pub fn fits_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Vec<String>> {
     }
     for k in [NAME_REF, MODEL_REF, ANIM_REF, POUCH_REF] {
         match item.comps.get(k) {
-            None => bad.push(format!("{} has no {k}", s.item)),
-            Some(v) if k != NAME_REF && held(p, &s.item, k, v).is_err() => bad.push(format!("{} keeps its {k} outside its pack", s.item)),
+            None => bad.push(format!("{source} has no {k}")),
+            Some(v) if k != NAME_REF && held(p, source, k, v).is_err() => bad.push(format!("{source} keeps its {k} outside its pack")),
             Some(_) => {}
         }
     }
     if item.comps.get(AS_REF) != donor.comps.get(AS_REF) && !shared_anim(p, &item) {
-        bad.push(format!("{} does not use the animation set of the shipped pickups", s.item));
+        bad.push(format!("{source} does not use the animation set of the shipped pickups"));
     }
     Ok(bad)
 }
@@ -127,6 +143,9 @@ fn actor_in(r: &str) -> Option<String> {
 }
 
 pub fn identity(p: &Pool, s: &Spec, item: &Chain, pouch: &str) -> Res<String> {
+    if let Some(id) = s.identity_override() {
+        return Ok(id.to_string());
+    }
     let mut seen: Vec<String> = Vec::new();
     let mut cur: Option<String> = Some(pouch.to_string());
     while let Some(f) = cur {
@@ -147,13 +166,74 @@ pub fn make(p: &Pool, s: &Spec) -> Res<Made> {
     make_with(p, s, &Layers::default())
 }
 
+
+
+
+
+
+fn make_event_ring(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
+    let source: &str = s.source();
+    let item: Chain = chain(p, source)?;
+    let pouch_source: &str = l.pouch_from.as_deref().ok_or_else(|| E::Msg("a key ring needs a --pouch-from key item".to_string()))?;
+    let pouch_chain: Chain = chain(p, pouch_source)?;
+    let who: &str = l.ring.as_deref().ok_or_else(|| E::Msg("a key ring needs a --ring identity".to_string()))?;
+    let version: u16 = p.byml(&actor_file(source))?.version;
+
+    let key_model: String = held(p, source, MODEL_REF, need(&item, source, MODEL_REF)?)?;
+    let model: String = model_file(&s.name);
+    let model_data: Vec<u8> = p.get(&key_model).ok_or_else(|| E::Msg(format!("{source} model {key_model} is missing")))?.to_vec();
+    let event: String = event_file(&s.name);
+    let pouch: String = pouch_file(&s.name);
+    let pouch_base: String = held(p, pouch_source, POUCH_REF, need(&pouch_chain, pouch_source, POUCH_REF)?)?;
+
+
+
+    let pouch_data: Vec<u8> = p.get(&pouch_base).ok_or_else(|| E::Msg(format!("{pouch_source} pouch {pouch_base} is missing")))?.to_vec();
+    let elink: String = held(p, pouch_source, ELINK_REF, need(&pouch_chain, pouch_source, ELINK_REF)?)?;
+
+    let mut performer: Node = Node::Map(Vec::new());
+    performer.set("EventUniqueAin", Node::Str(work(&format!("AI/Root/Event/{who}.event.root.ain"))));
+    performer.set("UseEventUniqueAin", Node::Bool(true));
+
+    let mut comps: Node = Node::Map(Vec::new());
+    comps.set(AS_REF, Node::Str(need(&pouch_chain, pouch_source, AS_REF)?.to_string()));
+    comps.set(NAME_REF, Node::Str(format!("?ActorSystem/ActorName/{who}.engine__actor__ActorName.bgyml")));
+    comps.set(ANIM_REF, Node::Str(need(&pouch_chain, pouch_source, ANIM_REF)?.to_string()));
+    comps.set(ELINK_REF, Node::Str(local(&elink)));
+    comps.set(EVENT_REF, Node::Str(local(&event)));
+    comps.set(MODEL_REF, Node::Str(local(&model)));
+    comps.set(POUCH_REF, Node::Str(local(&pouch)));
+
+    let mut actor: Node = Node::Map(Vec::new());
+    actor.set(PARENT, Node::Str(work(&actor_file(EVENT_BASE))));
+    actor.set(COMPONENTS, comps);
+    Ok(Made {
+        actor: (actor_file(&s.name), Byml { root: actor, version, big: false }.write()?),
+        pouch: (pouch.clone(), pouch_data),
+        identity: who.to_string(),
+        extra: vec![
+            (event, Byml { root: performer, version, big: false }.write()?),
+            (model, model_data),
+        ],
+    })
+}
+
 pub fn make_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
-    let item: Chain = chain(p, &s.item)?;
+    if l.ring.is_some() && !l.drop_ring {
+        return make_event_ring(p, s, l);
+    }
+
+
+
+    let source: &str = s.source();
+    let item: Chain = chain(p, source)?;
     let donor: Chain = chain(p, DONOR)?;
     if let Some(m) = fits_with(p, s, l)?.first() {
         return Err(E::Msg(format!("{m}, so the thin pickup template does not fit")));
     }
-    let item_pouch: String = held(p, &s.item, POUCH_REF, need(&item, &s.item, POUCH_REF)?)?;
+    let pouch_source: &str = l.pouch_from.as_deref().unwrap_or(source);
+    let pouch_chain: Chain = if pouch_source == source { item.clone() } else { chain(p, pouch_source)? };
+    let item_pouch: String = held(p, pouch_source, POUCH_REF, need(&pouch_chain, pouch_source, POUCH_REF)?)?;
     let version: u16 = p.byml(&actor_file(DONOR))?.version;
     let pouch_path: String = pouch_file(&s.name);
     let mut comps: Node = Node::Map(Vec::new());
@@ -170,11 +250,20 @@ pub fn make_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
         comps.set(AS_INFO_REF, Node::Str(need(&donor, DONOR, AS_INFO_REF)?.to_string()));
     }
     comps.set(AS_REF, Node::Str(need(&donor, DONOR, AS_REF)?.to_string()));
-    if l.own || s.name.starts_with(crate::slice::key_spots::DUNGEON_PREFIX) {
-        comps.set(NAME_REF, Node::Str(own_name_ref(&s.name)));
-    } else {
-        comps.set(NAME_REF, Node::Str(need(&item, &s.item, NAME_REF)?.to_string()));
-    }
+    let name_ref: String = match l.ring.as_deref() {
+        Some(who) => own_name_ref(who),
+        None if l.own || s.name.starts_with(crate::slice::key_spots::DUNGEON_PREFIX) => {
+
+
+            own_name_ref(&s.name)
+        }
+        None => need(&item, source, NAME_REF)?.to_string(),
+    };
+    comps.set(NAME_REF, Node::Str(name_ref));
+
+
+
+
     match &l.model {
         Some(m) => {
             let (r, f, b): (String, String, Vec<u8>) = model::anim(&s.name, version, l.pose.as_deref())?;
@@ -183,8 +272,8 @@ pub fn make_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
             extra.push((f, b));
         }
         None => {
-            comps.set(ANIM_REF, Node::Str(need(&item, &s.item, ANIM_REF)?.to_string()));
-            comps.set(MODEL_REF, Node::Str(need(&item, &s.item, MODEL_REF)?.to_string()));
+            comps.set(ANIM_REF, Node::Str(need(&item, source, ANIM_REF)?.to_string()));
+            comps.set(MODEL_REF, Node::Str(need(&item, source, MODEL_REF)?.to_string()));
         }
     }
     comps.set(POUCH_REF, Node::Str(local(&pouch_path)));
@@ -192,10 +281,10 @@ pub fn make_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
         comps.set(ATTENTION_REF, Node::Str(need(&donor, DONOR, ATTENTION_REF)?.to_string()));
     }
     if l.magic {
-        if meter::applies(&s.item) {
-            return Err(E::Msg(format!("{} gives no magic meter, the magic layer would add the raise back", s.item)));
+        if meter::applies(s.source()) {
+            return Err(E::Msg(format!("{} gives no magic meter, the magic layer would add the raise back", s.source())));
         }
-        let (f, d, r): (String, Vec<u8>, String) = magic::make(p, &item, &chain(p, BASE)?, &s.item, &s.name)?;
+        let (f, d, r): (String, Vec<u8>, String) = magic::make(p, &item, &chain(p, BASE)?, s.source(), &s.name)?;
         comps.set(magic::TABLE_REF, Node::Str(r));
         extra.push((f, d));
     }
@@ -317,7 +406,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn spec(style: Style) -> Spec {
-        Spec { item: "Item_Test".to_string(), name: "Obj_Test".to_string(), style, heap: None }
+        Spec { item: "Item_Test".to_string(), name: "Obj_Test".to_string(), style, heap: None, source: None, identity: None }
     }
 
     #[test]
@@ -394,11 +483,11 @@ pub(crate) mod tests {
             ]),
         )]);
         p.add(&actor_file("Item_Odd"), &odd).unwrap();
-        let sp: Spec = Spec { item: "Item_Odd".to_string(), name: "Obj_Odd".to_string(), style: Style::Touch, heap: None };
+        let sp: Spec = Spec { item: "Item_Odd".to_string(), name: "Obj_Odd".to_string(), style: Style::Touch, heap: None, source: None, identity: None };
         let bad: Vec<String> = fits(&p, &sp).unwrap();
         assert_eq!(bad.len(), 3);
         assert!(make(&p, &sp).is_err());
-        let own: Spec = Spec { item: DONOR.to_string(), name: "Obj_Twice".to_string(), style: Style::Touch, heap: None };
+        let own: Spec = Spec { item: DONOR.to_string(), name: "Obj_Twice".to_string(), style: Style::Touch, heap: None, source: None, identity: None };
         assert!(fits(&p, &own).unwrap().iter().any(|m| m.contains("already a world pickup")));
     }
 
@@ -424,7 +513,7 @@ pub(crate) mod tests {
             ]),
         )]);
         p.add(&actor_file(name), &y).unwrap();
-        Spec { item: name.to_string(), name: format!("Obj_{name}"), style: Style::Touch, heap: None }
+        Spec { item: name.to_string(), name: format!("Obj_{name}"), style: Style::Touch, heap: None, source: None, identity: None }
     }
 
     #[test]

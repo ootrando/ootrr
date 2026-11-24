@@ -322,6 +322,7 @@ pub fn fill_ordered(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::Value;
     use crate::slice::logic::{world, world_with};
 
     #[test]
@@ -337,6 +338,25 @@ mod tests {
         let d: Data = Data::load().unwrap();
         let w: World = world(&d).unwrap();
         assert!(w.start.iter().all(|(i, _)| !w.items.names[*i].starts_with("Small Key")));
+    }
+
+    #[test]
+    fn removing_a_ring_removes_all_of_its_keys() {
+        let d: Data = Data::load().unwrap();
+        let mut s: crate::settings::Settings = crate::settings::Settings::default();
+        s.set(crate::key_rings::SETTING, Value::Bool(true)).unwrap();
+        s.set("shuffle_smallkeys", Value::s("keysanity")).unwrap();
+        let p: crate::slice::support::Plan = crate::slice::support::plan(&s).unwrap();
+        let w: World = world_with(&d, &p.logic()).unwrap();
+        for r in crate::key_rings::RINGS {
+            let ring: crate::logic_items::ItemId = w.item(r.item).unwrap();
+            let key: crate::logic_items::ItemId = w.item(r.key).unwrap();
+            let mut search: crate::search::Search = crate::search::Search::new(&w);
+            search.add(ring, 1);
+            assert_eq!(search.cnt[key], r.count, "{}", r.item);
+            search.remove(ring);
+            assert_eq!(search.cnt[key], 0, "{}", r.item);
+        }
     }
 
     #[test]

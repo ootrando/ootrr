@@ -197,6 +197,10 @@ impl Setting {
         Setting::base(num, id, group, label, Kind::Multi, Value::Set(Vec::new()))
     }
 
+    pub fn multi_default(num: u16, id: &str, group: &str, label: &str, default: &[&str]) -> Setting {
+        Setting::base(num, id, group, label, Kind::Multi, Value::set(default))
+    }
+
     pub fn list(num: u16, id: &str, group: &str, label: &str, max_items: usize) -> Setting {
         let mut s: Setting = Setting::base(num, id, group, label, Kind::List, Value::Set(Vec::new()));
         s.max_items = max_items;

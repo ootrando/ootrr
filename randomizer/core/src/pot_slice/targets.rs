@@ -34,7 +34,7 @@ pub fn actor_of(d: &Data, loc: &str, item: &str, fixed: &BM<String, String>) -> 
     if let Some(a) = pickup::of(item) {
         return Ok(dropped(a));
     }
-    crate::slice::key_spots::resolve(d, item, fixed.get(loc).map(|s| s.as_str()))
+    crate::slice::key_spots::resolve_at(d, loc, item, fixed.get(loc).map(|s| s.as_str()))
         .map(|p| p.pack)
         .map_err(|e| E::Msg(format!("{item} has no world pickup and cannot be placed at {loc}: {e}")))
 }

@@ -51,9 +51,14 @@ pub fn check(s: &Settings, bad: &mut Vec<String>, noted: &mut Vec<String>) {
             Err(e) => bad.push(e.to_string()),
         }
     }
-    match s.text("shuffle_hideoutkeys") {
-        Ok("vanilla") => {}
-        Ok(v) => bad.push(format!("shuffle_hideoutkeys is {v}, which this build cannot place yet (only vanilla works)")),
-        Err(e) => bad.push(e.to_string()),
+    let hideout: &str = s.text("shuffle_hideoutkeys").unwrap_or("vanilla");
+    match hideout {
+        "vanilla" | "any_dungeon" | "keysanity" | "anywhere" => {}
+        v => bad.push(format!("shuffle_hideoutkeys is {v}, which this build cannot place yet (only vanilla, any_dungeon and keysanity work)")),
+    }
+    if hideout != "vanilla"
+        && !matches!(s.text("gerudo_fortress").unwrap_or("normal"), "fast" | "open")
+    {
+        bad.push(format!("shuffle_hideoutkeys is {hideout}, which needs gerudo_fortress to be fast or open"));
     }
 }

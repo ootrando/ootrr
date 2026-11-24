@@ -305,9 +305,9 @@ pub fn patch_gift(b: &mut Bf) -> Res<()> {
     let grant: usize = find(f, GIFT_GRANT)?;
     let show: usize = find(f, GIFT_SHOW)?;
     let wrapped = |i: usize| matches!(f.events[i].kind, Kind::Switch { .. });
-    // A dungeon item replaces the pouch add with its credit writes (crate::gift_keys), a chain
-    // that already ends where the add did.
-    let credited: bool = action(f, grant).is_some_and(|a| a.starts_with("GameDataActor."));
+
+
+    let credited: bool = action(f, grant).is_some_and(|a| a.starts_with("GameDataActor.")) || crate::gift_keys::is_ring_credit(f, grant);
     if !wrapped(grant) && !credited && action(f, grant).as_deref() != Some(POUCH_ADD) {
         return Err(Error::Format("story skip: the gift scene's grant is not a pouch add, the game files differ"));
     }
@@ -919,8 +919,10 @@ fn item_get(f: &mut Flow, name: &str, g: &SceneGive, then: u16, entries: &[&str]
     // A small key is held up as the minigame key through the key copy, whose window names the
     // dungeon key (crate::gift_keys::SMALL_KEY_SHOWN).
     let small: bool = matches!(g.key, Some((crate::gift_keys::Item::Small, _))) && g.actor == crate::gift_keys::SMALL_KEY_ITEM;
+    let ring: bool = matches!(g.key, Some((crate::gift_keys::Item::Ring(_), _)));
     let window: String = if small { crate::item_window::key_name(ITEM_GET.1) } else { crate::item_window::name(ITEM_GET.1) };
-    let entry: &str = if g.key.is_some() { &window } else { ITEM_GET.1 };
+
+    let entry: &str = if g.key.is_some() && !ring { &window } else { ITEM_GET.1 };
     let actor: String = if small { crate::gift_keys::SMALL_KEY_SHOWN.to_string() } else { g.actor.clone() };
     f.events.push(Event {
         name: name.to_string(),

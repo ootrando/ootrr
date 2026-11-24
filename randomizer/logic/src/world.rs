@@ -48,6 +48,7 @@ pub struct ItemDef {
 pub struct Spec {
     pub settings: Settings,
     pub items: Vec<ItemDef>,
+    pub rings: Vec<(String, String, u32)>,
     pub groups: Vec<(String, Vec<String>)>,
     pub start: Vec<(String, u32)>,
     pub helpers: Vec<Json>,
@@ -77,6 +78,7 @@ impl Spec {
         Spec {
             settings: Settings::new(),
             items: Vec::new(),
+            rings: Vec::new(),
             groups: Vec::new(),
             start: Vec::new(),
             helpers: Vec::new(),
@@ -89,6 +91,12 @@ impl Spec {
 
     pub fn add_item(&mut self, name: &str, adv: bool, count: u32) {
         self.items.push(ItemDef { name: name.to_string(), adv, count });
+    }
+
+
+    pub fn add_ring(&mut self, name: &str, key: &str, count: u32) {
+        self.add_item(name, true, 0);
+        self.rings.push((name.to_string(), key.to_string(), count));
     }
 
     pub fn add_regions(&mut self, text: &str) -> Res<()> {
@@ -206,6 +214,7 @@ pub struct World {
     pub real: Vec<LocId>,
     pub users: Vec<Vec<u32>>,
     pub tod_users: Vec<u32>,
+    pub rings: Vec<Option<(ItemId, u32)>>,
     region_ix: HM<String, RegionId>,
     loc_ix: HM<String, LocId>,
 }
@@ -276,6 +285,12 @@ impl World {
         for d in &spec.items {
             items.add(&d.name, d.adv, false)?;
             pool_counts.push(d.count);
+        }
+        let mut rings: Vec<Option<(ItemId, u32)>> = vec![None; items.len()];
+        for (name, key, count) in &spec.rings {
+            let i: ItemId = items.find(name).ok_or_else(|| E::Msg(format!("ring {name} is not an item")))?;
+            let k: ItemId = items.find(key).ok_or_else(|| E::Msg(format!("ring {name}: unknown key {key}")))?;
+            rings[i] = Some((k, *count));
         }
         let mut groups: HM<String, Vec<ItemId>> = HM::new();
         for (g, names) in &spec.groups {
@@ -425,6 +440,7 @@ impl World {
             real,
             users,
             tod_users,
+            rings,
             region_ix,
             loc_ix,
         })
@@ -440,6 +456,10 @@ impl World {
 
     pub fn item(&self, name: &str) -> Option<ItemId> {
         self.items.find(name)
+    }
+
+    pub fn ring_key(&self, i: ItemId) -> Option<(ItemId, u32)> {
+        self.rings.get(i).copied().flatten()
     }
 
     pub fn pool(&self) -> Vec<ItemId> {

@@ -32,6 +32,20 @@ pub struct Spec {
     pub name: String,
     pub style: Style,
     pub heap: Option<i32>,
+
+    pub source: Option<String>,
+
+    pub identity: Option<String>,
+}
+
+impl Spec {
+    pub fn source(&self) -> &str {
+        self.source.as_deref().unwrap_or(&self.item)
+    }
+
+    pub fn identity_override(&self) -> Option<&str> {
+        self.identity.as_deref()
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -40,6 +54,16 @@ pub struct Layers {
     pub ammo: bool,
     pub magic: bool,
     pub model: Option<String>,
+
+
+    pub pouch_from: Option<String>,
+
+    pub ring: Option<String>,
+
+
+    pub drop_ring: bool,
+
+
     pub spin: bool,
     /// With spin: how far, in millimetres, the pickup's body reaches below its origin so that the
     /// turning item model clears the ground (crate::pickup_pack::lift). The pack builds fill it in.
@@ -50,7 +74,7 @@ pub struct Layers {
 
 impl Layers {
     pub fn plain(&self) -> bool {
-        self.tags.is_empty() && !self.ammo && !self.magic && self.model.is_none() && !self.spin && !self.own
+        self.tags.is_empty() && !self.ammo && !self.magic && self.model.is_none() && self.pouch_from.is_none() && self.ring.is_none() && !self.drop_ring && !self.spin && !self.own
     }
 
     pub fn kit_ok(&self) -> bool {

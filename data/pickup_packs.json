@@ -1185,6 +1185,366 @@
       "status": "built",
       "identity": "Item_Arrow_Fire",
       "notes": "The shipped Obj_Arrow_Fire does not stay taken on the ground; this pack takes the pickup base. Built and read back in the placement sweep. Not yet tried in game."
+    },
+    {
+      "group": "D",
+      "item": "Item_Ring_Forest",
+      "pack": "Item_Ring_Forest",
+      "args": [
+        "--name",
+        "Item_Ring_Forest",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Forest",
+        "--ring",
+        "Item_Ring_Forest"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Forest",
+      "notes": "Key ring pickup. The small key model is kept, but the pouch and get event use the plain key-item template so the ring is saved and credited as itself instead of a small key."
+    },
+    {
+      "group": "D",
+      "item": "Item_Ring_Hideout",
+      "pack": "Item_Ring_Hideout",
+      "args": [
+        "--name",
+        "Item_Ring_Hideout",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Hideout",
+        "--ring",
+        "Item_Ring_Hideout"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Hideout",
+      "notes": "Hideout key ring pickup. The small key model is kept, but the pouch and get event use the plain key-item template so the manually enabled ring is saved and credited as itself."
+    },
+    {
+      "group": "D",
+      "item": "Item_Ring_Fire",
+      "pack": "Item_Ring_Fire",
+      "args": [
+        "--name",
+        "Item_Ring_Fire",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Fire",
+        "--ring",
+        "Item_Ring_Fire"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Fire",
+      "notes": "Key ring pickup. The small key model is kept, but the pouch and get event use the plain key-item template so the ring is saved and credited as itself instead of a small key."
+    },
+    {
+      "group": "D",
+      "item": "Item_Ring_Water",
+      "pack": "Item_Ring_Water",
+      "args": [
+        "--name",
+        "Item_Ring_Water",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Water",
+        "--ring",
+        "Item_Ring_Water"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Water",
+      "notes": "Key ring pickup. The small key model is kept, but the pouch and get event use the plain key-item template so the ring is saved and credited as itself instead of a small key."
+    },
+    {
+      "group": "D",
+      "item": "Item_Ring_Shadow",
+      "pack": "Item_Ring_Shadow",
+      "args": [
+        "--name",
+        "Item_Ring_Shadow",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Shadow",
+        "--ring",
+        "Item_Ring_Shadow"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Shadow",
+      "notes": "Key ring pickup. The small key model is kept, but the pouch and get event use the plain key-item template so the ring is saved and credited as itself instead of a small key."
+    },
+    {
+      "group": "D",
+      "item": "Item_Ring_Spirit",
+      "pack": "Item_Ring_Spirit",
+      "args": [
+        "--name",
+        "Item_Ring_Spirit",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Spirit",
+        "--ring",
+        "Item_Ring_Spirit"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Spirit",
+      "notes": "Key ring pickup. The small key model is kept, but the pouch and get event use the plain key-item template so the ring is saved and credited as itself instead of a small key."
+    },
+    {
+      "group": "D",
+      "item": "Item_Ring_Well",
+      "pack": "Item_Ring_Well",
+      "args": [
+        "--name",
+        "Item_Ring_Well",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Well",
+        "--ring",
+        "Item_Ring_Well"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Well",
+      "notes": "Key ring pickup. The small key model is kept, but the pouch and get event use the plain key-item template so the ring is saved and credited as itself instead of a small key."
+    },
+    {
+      "group": "D",
+      "item": "Item_Ring_GTG",
+      "pack": "Item_Ring_GTG",
+      "args": [
+        "--name",
+        "Item_Ring_GTG",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_GTG",
+        "--ring",
+        "Item_Ring_GTG"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_GTG",
+      "notes": "Key ring pickup. The small key model is kept, but the pouch and get event use the plain key-item template so the ring is saved and credited as itself instead of a small key."
+    },
+    {
+      "group": "D",
+      "item": "Item_Ring_Ganon",
+      "pack": "Item_Ring_Ganon",
+      "args": [
+        "--name",
+        "Item_Ring_Ganon",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Ganon",
+        "--ring",
+        "Item_Ring_Ganon"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Ganon",
+      "notes": "Key ring pickup. The small key model is kept, but the pouch and get event use the plain key-item template so the ring is saved and credited as itself instead of a small key."
+    },
+    {
+      "group": "D",
+      "item": "Item_RingDrop_Forest",
+      "pack": "Obj_RingDrop_Forest",
+      "args": [
+        "--name",
+        "Obj_RingDrop_Forest",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Forest",
+        "--drop-ring",
+        "Item_Ring_Forest"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Forest",
+      "notes": "Drop-form key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and other holders give a falling, touchable item."
+    },
+    {
+      "group": "D",
+      "item": "Item_RingDrop_Hideout",
+      "pack": "Obj_RingDrop_Hideout",
+      "args": [
+        "--name",
+        "Obj_RingDrop_Hideout",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Hideout",
+        "--drop-ring",
+        "Item_Ring_Hideout"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Hideout",
+      "notes": "Drop-form Hideout key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and the four native guard spots give a falling, touchable item."
+    },
+    {
+      "group": "D",
+      "item": "Item_RingDrop_Fire",
+      "pack": "Obj_RingDrop_Fire",
+      "args": [
+        "--name",
+        "Obj_RingDrop_Fire",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Fire",
+        "--drop-ring",
+        "Item_Ring_Fire"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Fire",
+      "notes": "Drop-form key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and other holders give a falling, touchable item."
+    },
+    {
+      "group": "D",
+      "item": "Item_RingDrop_Water",
+      "pack": "Obj_RingDrop_Water",
+      "args": [
+        "--name",
+        "Obj_RingDrop_Water",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Water",
+        "--drop-ring",
+        "Item_Ring_Water"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Water",
+      "notes": "Drop-form key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and other holders give a falling, touchable item."
+    },
+    {
+      "group": "D",
+      "item": "Item_RingDrop_Shadow",
+      "pack": "Obj_RingDrop_Shadow",
+      "args": [
+        "--name",
+        "Obj_RingDrop_Shadow",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Shadow",
+        "--drop-ring",
+        "Item_Ring_Shadow"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Shadow",
+      "notes": "Drop-form key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and other holders give a falling, touchable item."
+    },
+    {
+      "group": "D",
+      "item": "Item_RingDrop_Spirit",
+      "pack": "Obj_RingDrop_Spirit",
+      "args": [
+        "--name",
+        "Obj_RingDrop_Spirit",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Spirit",
+        "--drop-ring",
+        "Item_Ring_Spirit"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Spirit",
+      "notes": "Drop-form key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and other holders give a falling, touchable item."
+    },
+    {
+      "group": "D",
+      "item": "Item_RingDrop_Well",
+      "pack": "Obj_RingDrop_Well",
+      "args": [
+        "--name",
+        "Obj_RingDrop_Well",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Well",
+        "--drop-ring",
+        "Item_Ring_Well"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Well",
+      "notes": "Drop-form key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and other holders give a falling, touchable item."
+    },
+    {
+      "group": "D",
+      "item": "Item_RingDrop_GTG",
+      "pack": "Obj_RingDrop_GTG",
+      "args": [
+        "--name",
+        "Obj_RingDrop_GTG",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_GTG",
+        "--drop-ring",
+        "Item_Ring_GTG"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_GTG",
+      "notes": "Drop-form key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and other holders give a falling, touchable item."
+    },
+    {
+      "group": "D",
+      "item": "Item_RingDrop_Ganon",
+      "pack": "Obj_RingDrop_Ganon",
+      "args": [
+        "--name",
+        "Obj_RingDrop_Ganon",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Ganon",
+        "--drop-ring",
+        "Item_Ring_Ganon"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Ganon",
+      "notes": "Drop-form key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and other holders give a falling, touchable item."
     }
   ]
 }

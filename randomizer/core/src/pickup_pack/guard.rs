@@ -55,7 +55,7 @@ mod tests {
     }
 
     fn built(root: &P) -> Done {
-        let s: Spec = Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot".to_string(), style: Style::Touch, heap: None };
+        let s: Spec = Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot".to_string(), style: Style::Touch, heap: None, source: None, identity: None };
         let o: Opts = Opts { host: Host::Hookshot, base: None, rst_from: None, places: Vec::new(), dry: true };
         run(root, P::new("unused"), "unused", &s, &o).unwrap()
     }

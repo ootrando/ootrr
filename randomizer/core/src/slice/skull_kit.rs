@@ -30,7 +30,7 @@ pub fn actors(ds: &[Drop]) -> BS<&str> {
 
 fn spec(kit: &str) -> Res<Spec> {
     let from: &str = parent_of(kit).ok_or_else(|| E::Msg(format!("{kit} is not a kit pickup, a skulltula that drops it would come back after every visit")))?;
-    Ok(Spec { item: from.to_string(), name: kit.to_string(), style: Style::Touch, heap: None })
+    Ok(Spec { item: from.to_string(), name: kit.to_string(), style: Style::Touch, heap: None, source: None, identity: None })
 }
 
 pub fn build(rf: &mut Romfs, token: &[Entry], kit: &str) -> Res<Plan> {
@@ -319,7 +319,7 @@ mod tests {
             return;
         };
         let mut rf: Romfs = Romfs::open(&root).unwrap();
-        let s: Spec = Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot_GS".to_string(), style: Style::Touch, heap: None };
+        let s: Spec = Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot_GS".to_string(), style: Style::Touch, heap: None, source: None, identity: None };
         let o: Opts = Opts { host: Host::Hookshot, base: None, rst_from: None, places: Vec::new(), dry: true };
         let done: Done = crate::pickup_pack::kit::run(&root, P::new("unused"), "unused", &s, &o, &[TREE]).unwrap();
         let x: Extra = crate::pickup_pack::guard::extra(&done.files, &done.carried).unwrap();

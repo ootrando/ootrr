@@ -484,6 +484,24 @@ mod tests {
         assert!(SeedFile::read(&d).is_err());
     }
 
+    #[test]
+    fn rings_on_seed_file_keeps_its_settings_string() {
+        const ON: &str = "OOTRR1-A4AQECIBAMHACBQRAECCMAIBE4AQCMYBAFGACAKOAEBGSAIAQ4AQCAGMAEAQDFZ5";
+        let settings: Settings = Settings::decode(ON).unwrap().settings;
+        let f: SeedFile = SeedFile::new(
+            "rings on seed",
+            &settings,
+            "oot-remake:1.0.0",
+            placements(&[("deku_tree_compass_chest", "Small Key Ring (Forest Temple)")]),
+        )
+        .unwrap();
+        let text: String = f.to_text();
+        assert!(text.contains(ON));
+        let back: SeedFile = SeedFile::parse(&text).unwrap();
+        assert_eq!(back, f);
+        assert_eq!(back.settings().unwrap().settings.encode().unwrap(), ON);
+    }
+
     const FROZEN_V1: &str = r#"{
   "format": "ootrr-seed",
   "version": 1,

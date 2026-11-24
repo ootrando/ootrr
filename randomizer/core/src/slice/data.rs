@@ -166,6 +166,21 @@ pub fn parse_items(t: &str) -> Res<Vec<Item>> {
                 .unwrap_or_default(),
         });
     }
+
+
+
+    for r in crate::key_rings::all_with_hideout() {
+        let Some(item) = out.iter_mut().find(|i| i.name == r.item) else {
+            continue;
+        };
+        item.kind = "Item".to_string();
+        item.adv = true;
+        item.actor = Some(crate::key_rings::pack(r.actor));
+        item.conf = "exact".to_string();
+        item.dungeon = None;
+        item.tiers.clear();
+        item.world.clear();
+    }
     Ok(out)
 }
 
@@ -399,6 +414,25 @@ mod tests {
             }
         }
         assert!(d.scan.game.starts_with("oot-remake:"));
+    }
+
+    #[test]
+    fn rings_become_generated_items_without_duplicate_rows() {
+        let d: Data = Data::load().unwrap();
+        for r in crate::key_rings::all_with_hideout() {
+            let i: &Item = d.item(r.item).unwrap();
+            assert_eq!(i.kind, "Item", "{}", r.item);
+            assert_eq!(i.actor.as_deref(), Some(crate::key_rings::pack(r.actor).as_str()), "{}", r.item);
+            assert_eq!(i.conf, "exact", "{}", r.item);
+            assert!(i.adv, "{}", r.item);
+            assert!(i.dungeon.is_none(), "{}", r.item);
+            assert!(i.tiers.is_empty() && i.world.is_empty(), "{}", r.item);
+        }
+        assert_eq!(
+            d.items.iter().filter(|i| i.name == "Small Key Ring (Forest Temple)").count(),
+            1
+        );
+        assert_eq!(d.items.iter().filter(|i| i.name == crate::key_rings::HIDEOUT_RING.item).count(), 1);
     }
 
     #[test]

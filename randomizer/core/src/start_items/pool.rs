@@ -26,7 +26,11 @@ fn gone_kinds(p: &Plan) -> Vec<&'static str> {
 }
 
 pub fn active(p: &Plan) -> bool {
-    p.fire_loop_open() || p.open.beans || !gone_kinds(p).is_empty() || p.kit.take.iter().any(|t| t.strip != Strip::Keep && t.count > 0)
+    p.hideout != Keep::Vanilla
+        || p.fire_loop_open()
+        || p.open.beans
+        || !gone_kinds(p).is_empty()
+        || p.kit.take.iter().any(|t| t.strip != Strip::Keep && t.count > 0)
 }
 
 fn kind_of<'a>(d: &'a Data, w: &World, it: ItemId) -> &'a str {
@@ -146,6 +150,8 @@ pub fn base(d: &Data, w: &World, p: &Plan, vanilla: &Placement, free: &[LocId]) 
     for t in p.kit.take.iter().filter(|t| t.strip != Strip::Keep && t.count > 0) {
         strip_one(&c, t, &mut out, &mut notes)?;
     }
+
+
     Ok((out, notes))
 }
 
@@ -271,6 +277,34 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn hideout_keys_never_exceed_four_in_a_seed() {
+        let d: Data = Data::load().unwrap();
+        for shuffle in ["vanilla", "any_dungeon", "keysanity"] {
+            let s: Settings = with(&[("shuffle_hideoutkeys", Value::s(shuffle)), ("gerudo_fortress", Value::s("open"))]);
+            for n in 0..3 {
+                let g = beatable(&d, &s, &format!("hideout count {shuffle} {n}"));
+                let keys: usize = g.seed_file.placements.values().filter(|v| v.as_str() == "Small Key (Thieves Hideout)").count();
+                assert!(keys <= 4, "{shuffle} {n} has {keys} Hideout keys, more than the four that exist");
+                if shuffle != "vanilla" {
+                    assert_eq!(keys, 4, "{shuffle} {n} has {keys} Hideout keys, expected four in the shuffled pool");
+                }
+            }
+        }
+        let s: Settings = with(&[
+            ("shuffle_hideoutkeys", Value::s("keysanity")),
+            ("gerudo_fortress", Value::s("open")),
+            (crate::key_rings::HIDEOUT_SETTING, Value::Bool(true)),
+        ]);
+        for n in 0..3 {
+            let g = beatable(&d, &s, &format!("hideout ring count {n}"));
+            let keys: usize = g.seed_file.placements.values().filter(|v| v.as_str() == "Small Key (Thieves Hideout)").count();
+            let rings: usize = g.seed_file.placements.values().filter(|v| v.as_str() == crate::key_rings::HIDEOUT_RING.item).count();
+            assert_eq!(keys, 0, "hideout ring {n} still places {keys} individual Hideout keys");
+            assert_eq!(rings, 1, "hideout ring {n} places {rings} Hideout rings");
         }
     }
 

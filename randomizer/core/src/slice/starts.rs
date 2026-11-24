@@ -5,7 +5,7 @@ use crate::settings::Loaded;
 use crate::slice::data::Data;
 use crate::slice::fill::vanilla_place;
 use crate::slice::logic::world_with;
-use crate::slice::support::{plan, Plan};
+use crate::slice::support::{plan_with_seed as plan, Plan};
 use crate::start_reward::pick as pick_start;
 use crate::world::{Placement, World};
 
@@ -33,7 +33,7 @@ pub fn add(d: &Data, p: &Plan, w: &mut World, seed: &str) -> Res<()> {
 
 pub fn rebuild(d: &Data, seed: &SeedFile) -> Res<(World, Placement)> {
     let loaded: Loaded = seed.settings()?;
-    let mut p: Plan = plan(&loaded.settings)?;
+    let mut p: Plan = plan(&loaded.settings, Some(&seed.seed))?;
     let lay: Option<crate::shops::Layout> = crate::shops::seed::layout(seed)?;
     let owned: Option<Data> = lay.as_ref().map(|l| crate::shops::logic::data_with(d, l)).transpose()?;
     let d: &Data = owned.as_ref().unwrap_or(d);

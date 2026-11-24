@@ -11,7 +11,7 @@ use crate::slice::data::Data;
 use crate::slice::edit::Built;
 
 pub fn after(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Host, mut b: Built) -> Res<Built> {
-    let p = crate::slice::support::plan(&seed.settings()?.settings)?;
+    let p = crate::slice::support::plan_with_seed(&seed.settings()?.settings, Some(&seed.seed))?;
     crate::shops::seed::check(&p.shops, seed)?;
     let Some(l) = crate::shops::seed::layout(seed)? else {
         return Ok(b);

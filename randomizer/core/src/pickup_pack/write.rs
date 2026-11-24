@@ -1,4 +1,4 @@
-use std::collections::BTreeMap as BM;
+use std::collections::{BTreeMap as BM, BTreeSet as BS};
 use std::fmt::Write as W;
 use std::fs;
 use std::path::{Path as P, PathBuf as PB};
@@ -9,8 +9,8 @@ use crate::flow_locations::dict_id;
 use crate::modpack::{Host, Pack};
 use crate::pickup_pack::actor::pouch_file;
 use crate::pickup_pack::ammo;
-use crate::pickup_pack::build::{plan_with, pool_of, Plan};
-use crate::pickup_pack::closure::{actor_file, chain, select, texts, Pool};
+use crate::pickup_pack::build::{extra_roots, plan_with_files, pool_of, Plan};
+use crate::pickup_pack::closure::{actor_file, chain, select_with, texts, Pool};
 use crate::pickup_pack::guard;
 use crate::pickup_pack::magic;
 use crate::pickup_pack::meter;
@@ -102,35 +102,49 @@ pub(crate) fn table(rf: &mut Romfs, o: &Opts, modded: bool, path: &str, edit: im
 }
 
 pub(crate) fn tables(rf: &mut Romfs, o: &Opts, modded: bool, s: &Spec, l: &Layers, identity: &str) -> Res<(Vec<File>, i32)> {
+    let source: &str = s.source();
     let seen: Byml = Byml::parse(&start(rf, o.base.as_ref(), ACTOR_INFO)?)?;
-    let own: i32 = rows::own_heap(&seen, &s.item)?;
+    let own: i32 = rows::own_heap(&seen, source)?;
     let heap: i32 = match s.heap {
-        Some(h) if h < own => return Err(E::Msg(format!("the heap {h} is below the {own} that {} needs by itself", s.item))),
+        Some(h) if h < own => return Err(E::Msg(format!("the heap {h} is below the {own} that {source} needs by itself"))),
         Some(h) => h,
-        None => rows::heap(&seen, &s.item)?,
+        None => rows::heap(&seen, source)?,
     };
     let mut at: [usize; 2] = [0, 0];
     let a: File = table(rf, o, modded, ACTOR_INFO, |y: &mut Byml| {
-        let mut r: Node = rows::actor_row(rows::need(y, &s.item, ACTOR_INFO)?, &s.name, heap);
+        let mut r: Node = rows::actor_row(rows::need(y, source, ACTOR_INFO)?, &s.name, heap);
         if let Some(m) = &l.model {
             crate::pickup_pack::model::row(&mut r, rows::need(y, m, ACTOR_INFO)?, l.pose.as_deref())?;
         }
-        if l.own {
+        if l.ring.is_some() {
+
+
+
+
+            r.set("ActorName", Node::Str(identity.to_string()));
+            if let Some(elink) = l.pouch_from.as_deref() {
+                r.set("ELinkUserName", Node::Str(elink.to_string()));
+            }
+        } else if l.own {
             r.set(rows::ACTOR_NAME, Node::Str(s.name.clone()));
         }
         at[0] = rows::insert(y, r)?;
         Ok(())
     })?;
     let g: File = table(rf, o, modded, GAME_ACTOR_INFO, |y: &mut Byml| {
-        let r: Node = rows::game_row(rows::need(y, BASE, GAME_ACTOR_INFO)?, rows::need(y, &s.item, GAME_ACTOR_INFO)?, &s.name);
+        let r: Node = rows::game_row(rows::need(y, BASE, GAME_ACTOR_INFO)?, rows::need(y, source, GAME_ACTOR_INFO)?, &s.name);
         at[1] = rows::insert(y, r)?;
         Ok(())
     })?;
     if at[0] != at[1] {
-        return Err(E::Msg(format!("the new row sits at {} in the actor table and at {} in the game actor table, the two tables no longer line up", at[0], at[1])));
+        return Err(E::Msg(format!(
+            "the new rows sit at {} in the actor table and at {} in the game actor table, the two tables no longer line up",
+            at[0], at[1]
+        )));
     }
     let q: File = table(rf, o, modded, POUCH_INFO, |y: &mut Byml| {
-        let mut r: Node = rows::pouch_row(rows::need(y, &s.item, POUCH_INFO)?, &s.name);
+        let pouch_source: &str = l.pouch_from.as_deref().unwrap_or(source);
+        let mut r: Node = rows::pouch_row(rows::need(y, pouch_source, POUCH_INFO)?, &s.name);
         if l.own {
             rows::quiet(&mut r);
         } else if s.name.starts_with(crate::slice::key_spots::DUNGEON_PREFIX) {
@@ -138,6 +152,10 @@ pub(crate) fn tables(rf: &mut Romfs, o: &Opts, modded: bool, s: &Spec, l: &Layer
             r.set("PouchStockable", Node::Bool(true));
         }
         rows::insert(y, r)?;
+        if identity != s.name && rows::find(y, identity).is_none() {
+            let id: Node = rows::pouch_row(rows::need(y, pouch_source, POUCH_INFO)?, identity);
+            rows::insert(y, id)?;
+        }
         if l.ammo {
             ammo::apply(y, &s.name, identity)?;
         }
@@ -155,7 +173,7 @@ fn tag_file(rf: &mut Romfs, o: &Opts, modded: bool, s: &Spec, l: &Layers) -> Res
     }
     let first: Vec<u8> = start(rf, o.base.as_ref(), TAG)?;
     let old: Table = Table::parse(&first)?;
-    let raw: Vec<u8> = tag::add(&old, &s.item, &s.name, &l.tags)?.write()?;
+    let raw: Vec<u8> = tag::add(&old, s.source(), &s.name, &l.tags)?.write()?;
     let id: Option<u32> = dict_id(&rf.read(TAG)?);
     Ok(Some(File { path: TAG.to_string(), z: zs::compress_raw(&raw, id)?, old: old_len(rf, modded, TAG, &first)?, raw, fresh: false }))
 }
@@ -267,7 +285,11 @@ pub(crate) fn sized(rst: &mut Rst, pl: &Plan, files: &[File], carried: &[File], 
         let _ = writeln!(note, "{}: {} -> {} bytes, size table entry {:?} -> {:?}", f.path, f.old, f.raw.len(), was, now);
     }
     for (f, len) in &pl.fresh {
-        let n: u32 = sizes::file_size(rst, &pl.peers, f, *len)?;
+        let n: u32 = if sizes::kind(f) == "event.root.ainb" {
+            sizes::event_size(*len)?
+        } else {
+            sizes::file_size(rst, &pl.peers, f, *len)?
+        };
         rst.set_size(f, n)?;
         let _ = writeln!(note, "{f}: new file in the pack, {len} bytes, size table entry {n}");
     }
@@ -356,7 +378,7 @@ pub fn audit(rf: &mut Romfs, s: &Spec, pl: &Plan, files: &[File], rst_z: &[u8], 
     let p: Pool = pool_of(&[es.clone()])?;
     let mut names: Vec<String> = es.iter().map(|e| e.name.clone()).collect();
     names.sort();
-    if select(&p, &s.name)? != names {
+    if select_with(&p, &s.name, &extra_roots(&p, sc.layers)?)? != names {
         return Err(E::Format("audit: the written pack holds a file its actor does not reach"));
     }
     for e in &es {
@@ -382,9 +404,14 @@ pub fn audit(rf: &mut Romfs, s: &Spec, pl: &Plan, files: &[File], rst_z: &[u8], 
         let n: usize = y.root.as_arr().map(|a| a.len()).unwrap_or(0);
         let m: usize = was.root.as_arr().map(|a| a.len()).unwrap_or(0);
         let had: usize = usize::from(rows::find(&was, &s.name).is_some());
+
+
+
+        let extra: usize = usize::from(t == POUCH_INFO && pl.identity != s.name && rows::find(&was, &pl.identity).is_none());
         let r: &Node = rows::need(&y, &s.name, t)?;
-        if !rows::sorted(&y)? || n + had != m + 1 {
-            return Err(E::Msg(format!("audit: {t} is not the table it started from plus one sorted row")));
+        if !rows::sorted(&y)? || n + had != m + 1 + extra {
+            let want: &str = if extra == 0 { "plus one sorted row" } else { "plus the expected sorted rows" };
+            return Err(E::Msg(format!("audit: {t} is not the table it started from {want}")));
         }
         let index: std::collections::HashMap<&str, &Node> = rows::index(&y);
         let eased = |x: &Node| t == POUCH_INFO && ((sc.layers.ammo && rows::id(x) == Some(pl.identity.as_str())) || (meter::applies(&pl.identity) && meter::loses(x)));
@@ -437,29 +464,56 @@ pub fn run(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts) -> Res<Done>
 }
 
 pub fn run_with(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts, l: &Layers) -> Res<Done> {
-    if !is_actor_name(&s.name) || !is_actor_name(&s.item) {
-        return Err(E::Msg(format!("{} or {} is not a plain actor name", s.name, s.item)));
+    if !is_actor_name(&s.name) || !is_actor_name(&s.item) || !is_actor_name(s.source()) || s.identity.as_deref().is_some_and(|id| !is_actor_name(id)) {
+        return Err(E::Msg(format!("{}, {} or an override is not a plain actor name", s.name, s.item)));
     }
+    let source: &str = s.source();
     let o: &Opts = &Opts { base: base_dir(o)?, ..o.clone() };
     let mut rf: Romfs = Romfs::open(romfs)?;
     if rf.root.join(pack_of(&s.name)).is_file() {
         return Err(E::Msg(format!("the game already ships {}, use that actor", s.name)));
     }
-    if !rf.root.join(pack_of(&s.item)).is_file() {
-        return Err(E::Msg(format!("the game has no actor pack for {}", s.item)));
+    if !rf.root.join(pack_of(source)).is_file() {
+        return Err(E::Msg(format!("the game has no actor pack for {source}")));
     }
     let posed: Layers = crate::pickup_pack::model::layers(&mut rf, l)?;
-    let lifted: Layers = crate::pickup_pack::lift::layers(&mut rf, &s.item, &posed)?;
+    let lifted: Layers = crate::pickup_pack::lift::layers(&mut rf, source, &posed)?;
     let l: &Layers = &lifted;
     let mut packs: Vec<Vec<Entry>> = Vec::new();
-    for n in [BASE, DONOR, s.item.as_str()] {
-        packs.push(sarc::parse(&start(&mut rf, o.base.as_ref(), &pack_of(n))?)?);
+    let mut seen: BS<&str> = BS::new();
+    for n in [BASE, DONOR, source]
+        .into_iter()
+        .chain(l.pouch_from.as_deref())
+
+
+
+        .chain(l.ring.as_deref().filter(|_| !l.drop_ring).map(|_| crate::pickup_pack::actor::EVENT_BASE))
+    {
+        if seen.insert(n) {
+            packs.push(sarc::parse(&start(&mut rf, o.base.as_ref(), &pack_of(n))?)?);
+        }
     }
+
+
     if let Some(m) = l.model.as_deref() {
-        let es: Vec<Entry> = sarc::parse(&start(&mut rf, o.base.as_ref(), &pack_of(m))?)?;
-        packs.push(es.into_iter().filter(|e| crate::pickup_pack::closure::is_byml(&e.data)).collect());
+        if seen.insert(m) {
+            let es: Vec<Entry> = sarc::parse(&start(&mut rf, o.base.as_ref(), &pack_of(m))?)?;
+            packs.push(es.into_iter().filter(|e| crate::pickup_pack::closure::is_byml(&e.data)).collect());
+        }
     }
-    let pl: Plan = plan_with(&packs, s, l)?;
+    let mut extra: Vec<(String, Vec<u8>)> = Vec::new();
+    if let Some(who) = l.ring.as_deref() {
+        if !crate::pickup_pack::is_actor_name(who) || s.identity.as_deref() != Some(who) {
+            return Err(E::Msg(format!("{who} must be a plain actor name and the pack identity")));
+        }
+
+
+        if !l.drop_ring {
+            let donor: Vec<u8> = crate::ring_event::donor(&mut rf)?;
+            extra.push((format!("AI/{who}.event.root.ainb"), crate::ring_event::make(who, &donor)?));
+        }
+    }
+    let pl: Plan = plan_with_files(&packs, s, l, &extra)?;
     let (mut rst, modded): (Rst, bool) = size_table(&mut rf, o)?;
     let mut note: String = String::new();
     let id: u32 = dict_id(&rf.read(&pack_of(BASE))?).unwrap_or(PACK_DICT);
@@ -478,7 +532,14 @@ pub fn run_with(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts, l: &Lay
     for line in audit(&mut rf, s, &pl, &files, &rst_z, &sc)? {
         let _ = writeln!(note, "{line}");
     }
-    let _ = writeln!(note, "{}", guard::check(&mut rf, &s.name, &files, &carried)?);
+
+
+    let guard_line: String = if l.ring.is_some() && !l.drop_ring {
+        format!("{} is a saved key item, it does not carry a world pickup death table", s.name)
+    } else {
+        guard::check(&mut rf, &s.name, &files, &carried)?
+    };
+    let _ = writeln!(note, "{guard_line}");
     let mut root: Option<PB> = None;
     if !o.dry {
         let pk: Pack = Pack::create_for(load, TITLE_ID, mod_name, o.host)?;
@@ -495,6 +556,7 @@ pub fn run_with(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts, l: &Lay
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pickup_pack::build::plan_with;
     use crate::pickup_pack::Style;
 
     fn real() -> Option<PB> {
@@ -508,7 +570,7 @@ mod tests {
     }
 
     fn hookshot() -> Spec {
-        Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot".to_string(), style: Style::Touch, heap: None }
+        Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot".to_string(), style: Style::Touch, heap: None, source: None, identity: None }
     }
 
     fn opts(places: Vec<u64>) -> Opts {
@@ -619,6 +681,155 @@ mod tests {
     }
 
     #[test]
+    fn the_real_ring_build_uses_one_row_per_table_for_the_ring_identity() {
+        let Some(root) = real() else {
+            return;
+        };
+        let s: Spec = Spec {
+            item: "Item_Ring_Forest".to_string(),
+            name: "Item_Ring_Forest".to_string(),
+            style: Style::Touch,
+            heap: None,
+            source: Some("Item_Dungeon_SmallKey".to_string()),
+            identity: Some("Item_Ring_Forest".to_string()),
+        };
+        let l: Layers = Layers {
+            pouch_from: Some("Item_Medal_Forest".to_string()),
+            ring: Some("Item_Ring_Forest".to_string()),
+            ..Layers::default()
+        };
+        let mut rf: Romfs = Romfs::open(&root).unwrap();
+        let o: Opts = opts(Vec::new());
+        let d: Done = run_with(&root, P::new("unused"), "unused", &s, &o, &l).unwrap();
+        for t in [ACTOR_INFO, GAME_ACTOR_INFO, POUCH_INFO] {
+            let was: Byml = rf.read_byml(t).unwrap();
+            let now: Byml = Byml::parse(&file(&d, t).raw).unwrap();
+            let was_n: usize = was.root.as_arr().unwrap().len();
+            let now_n: usize = now.root.as_arr().unwrap().len();
+            assert_eq!(now_n, was_n + 1, "{t}");
+            assert!(rows::find(&now, "Item_Ring_Forest").is_some(), "{t}");
+        }
+        let actors: Byml = Byml::parse(&file(&d, ACTOR_INFO).raw).unwrap();
+        let actor: &Node = rows::find(&actors, "Item_Ring_Forest").unwrap();
+        assert_eq!(text(actor, "ActorName"), "Item_Ring_Forest");
+        assert_eq!(text(actor, "ELinkUserName"), "Item_Medal_Forest");
+
+        let es: Vec<Entry> = sarc::parse(&file(&d, &pack_of("Item_Ring_Forest")).raw).unwrap();
+        let names: BS<&str> = es.iter().map(|e| e.name.as_str()).collect();
+        for f in [
+            "Actor/Item_Ring_Forest.engine__actor__ActorParam.bgyml",
+            "Component/EventPerformerParam/Item_Ring_Forest.engine__component__EventPerformerParam.bgyml",
+            "Component/EventPerformerParam/PouchContent.engine__component__EventPerformerParam.bgyml",
+            "Component/ModelInfo/Item_Ring_Forest.engine__component__ModelInfo.bgyml",
+            "Component/PouchContentParam/Item_Ring_Forest.game__component__PouchContentParam.bgyml",
+            "AI/Item_Ring_Forest.event.root.ainb",
+        ] {
+            assert!(names.contains(f), "{f} is missing from the ring pack");
+        }
+        for f in [
+            "Component/ASInfo/Item_Ring_Forest.engine__component__ASInfo.bgyml",
+            "Component/CaptureParam/Item_Ring_Forest.game__component__CaptureParam.bgyml",
+            "Component/ELink/Item_Ring_Forest.engine__component__ELinkParam.bgyml",
+            "Component/Physics/Item_Ring_Forest.engine__component__PhysicsParam.bgyml",
+        ] {
+            assert!(!names.contains(f), "{f} belongs to a world pickup, not a ring");
+        }
+
+        let actor_file_data: Byml = in_pack(&d, "Item_Ring_Forest", &actor_file("Item_Ring_Forest")).unwrap();
+        assert_eq!(actor_file_data.root.get("$parent").and_then(Node::as_str), Some("Work/Actor/Item_EventObject_Base.engine__actor__ActorParam.gyml"));
+        assert_eq!(comp(&d, "Item_Ring_Forest", "ActorNameRef").as_deref(), Some("?ActorSystem/ActorName/Item_Ring_Forest.engine__actor__ActorName.bgyml"));
+        assert_eq!(comp(&d, "Item_Ring_Forest", "EventPerformerRef").as_deref(), Some("?Component/EventPerformerParam/Item_Ring_Forest.engine__component__EventPerformerParam.bgyml"));
+        assert_eq!(comp(&d, "Item_Ring_Forest", "ModelInfoRef").as_deref(), Some("?Component/ModelInfo/Item_Ring_Forest.engine__component__ModelInfo.bgyml"));
+        assert_eq!(comp(&d, "Item_Ring_Forest", "PouchContentRef").as_deref(), Some("?Component/PouchContentParam/Item_Ring_Forest.game__component__PouchContentParam.bgyml"));
+        assert!(comp(&d, "Item_Ring_Forest", "ELinkRef").unwrap().contains("Component/ELink/"), "{}", comp(&d, "Item_Ring_Forest", "ELinkRef").unwrap());
+        assert!(comp(&d, "Item_Ring_Forest", "XLinkRef").is_none());
+        assert!(comp(&d, "Item_Ring_Forest", "ASInfoRef").is_none());
+        assert!(comp(&d, "Item_Ring_Forest", "AttentionSenderRef").is_none());
+
+        let performer: Byml = in_pack(&d, "Item_Ring_Forest", "Component/EventPerformerParam/Item_Ring_Forest.engine__component__EventPerformerParam.bgyml").unwrap();
+        assert_eq!(performer.root.get("EventUniqueAin").and_then(Node::as_str), Some("Work/AI/Root/Event/Item_Ring_Forest.event.root.ain"));
+        assert_eq!(performer.root.get("UseEventUniqueAin"), Some(&Node::Bool(true)));
+        let model: Byml = in_pack(&d, "Item_Ring_Forest", "Component/ModelInfo/Item_Ring_Forest.engine__component__ModelInfo.bgyml").unwrap();
+        assert_eq!(model.root.get("FmdbName").and_then(Node::as_str), Some("Obj_Dungeon_SmallKey"));
+        assert_eq!(model.root.get("ModelProjectName").and_then(Node::as_str), Some("Obj_Dungeon_SmallKey"));
+        let pouch: Byml = in_pack(&d, "Item_Ring_Forest", "Component/PouchContentParam/Item_Ring_Forest.game__component__PouchContentParam.bgyml").unwrap();
+        assert_eq!(pouch.root.get("$parent").and_then(Node::as_str), Some("Work/Component/PouchContentParam/Default.game__component__PouchContentParam.gyml"));
+        assert!(pouch.root.get("PouchActor").is_none());
+        assert!(pouch.root.get("IsCountCheckOnFirstGet").is_none());
+        let ain: &[u8] = &sarc::get(&es, "AI/Item_Ring_Forest.event.root.ainb").unwrap().data;
+        let ain: String = String::from_utf8_lossy(ain).into_owned();
+        assert!(ain.contains("IsGet.Item_Ring_Forest"));
+        assert!(!ain.contains("Item_KeyRing_"));
+    }
+
+    #[test]
+    fn all_real_ring_packs_pass_the_persistence_guard() {
+        let Some(root) = real() else {
+            return;
+        };
+        let catalog: Vec<crate::pickup_pack::catalog::Entry> = crate::pickup_pack::catalog::load().unwrap();
+        for r in crate::key_rings::all_with_hideout() {
+            let e: &crate::pickup_pack::catalog::Entry = catalog.iter().find(|e| e.item == r.actor).unwrap();
+            let (s, mut l): (Spec, Layers) = crate::pickup_pack::catalog::spec(r.actor, &e.args).unwrap();
+            l.spin = true;
+            let d: Done = run_with(&root, P::new("unused"), "unused", &s, &opts(Vec::new()), &l).unwrap();
+            assert!(d.report.contains("is a saved key item"), "{}: {}", r.actor, d.report);
+        }
+    }
+
+    #[test]
+    fn the_drop_ring_build_uses_the_generic_get_flow_on_a_world_pickup_body() {
+        let Some(root) = real() else {
+            return;
+        };
+        let r: &'static crate::key_rings::Ring = &crate::key_rings::RINGS[0];
+        let catalog: Vec<crate::pickup_pack::catalog::Entry> = crate::pickup_pack::catalog::load().unwrap();
+        let e: &crate::pickup_pack::catalog::Entry = catalog.iter().find(|e| e.item == r.drop_item).unwrap();
+        let (s, mut l): (Spec, Layers) = crate::pickup_pack::catalog::spec(&e.item, &e.args).unwrap();
+        l.spin = true;
+        let d: Done = run_with(&root, P::new("unused"), "unused", &s, &opts(Vec::new()), &l).unwrap();
+
+        for t in [ACTOR_INFO, GAME_ACTOR_INFO, POUCH_INFO] {
+            let now: Byml = Byml::parse(&file(&d, t).raw).unwrap();
+            assert!(rows::find(&now, &s.name).is_some(), "{t} has no {}", s.name);
+        }
+        let pouch: Byml = Byml::parse(&file(&d, POUCH_INFO).raw).unwrap();
+        assert!(rows::find(&pouch, r.actor).is_some(), "the saved ring identity has no pouch row");
+        let actors: Byml = Byml::parse(&file(&d, ACTOR_INFO).raw).unwrap();
+        let actor: &Node = rows::find(&actors, &s.name).unwrap();
+        assert_eq!(text(actor, "ActorName"), r.actor);
+        assert_eq!(text(actor, "ELinkUserName"), "Item_Medal_Forest");
+
+        let es: Vec<Entry> = sarc::parse(&file(&d, &pack_of(&s.name)).raw).unwrap();
+        let names: BS<&str> = es.iter().map(|e| e.name.as_str()).collect();
+        for f in [
+            format!("Actor/{}.engine__actor__ActorParam.bgyml", s.name),
+            format!("Component/ASInfo/{}.engine__component__ASInfo.bgyml", s.name),
+            format!("Component/PouchContentParam/{}.game__component__PouchContentParam.bgyml", s.name),
+        ] {
+            assert!(names.contains(f.as_str()), "{f} is missing from the drop ring pack");
+        }
+        let actor_file_data: Byml = in_pack(&d, &s.name, &actor_file(&s.name)).unwrap();
+        assert_eq!(actor_file_data.root.get("$parent").and_then(Node::as_str), Some("Work/Actor/Obj_Item_Base.engine__actor__ActorParam.gyml"));
+        assert!(comp(&d, &s.name, "ActorNameRef").unwrap().contains(r.actor));
+        assert!(comp(&d, &s.name, "ASInfoRef").unwrap().contains(&s.name));
+        assert!(comp(&d, &s.name, "ELinkRef").is_none());
+
+
+        assert!(comp(&d, &s.name, "EventPerformerRef").is_none(), "a drop ring must not override the generic get performer");
+        assert!(
+            !names.contains(format!("Component/EventPerformerParam/{}.engine__component__EventPerformerParam.bgyml", s.name).as_str()),
+            "a drop ring must not ship a private get performer"
+        );
+        assert!(!names.contains(format!("AI/{}.event.root.ainb", r.actor).as_str()), "a drop ring must not ship a private get event");
+
+        let line: String = format!("{} stays collected once taken", s.name);
+        assert!(d.report.contains(&line), "{}", d.report);
+        let mut rf: Romfs = Romfs::open(&root).unwrap();
+        assert!(guard::check(&mut rf, &s.name, &d.files, &d.carried).is_ok());
+    }
+
+    #[test]
     fn the_real_build_refuses_a_shipped_name_a_missing_item_and_a_chest() {
         let Some(root) = real() else {
             return;
@@ -696,7 +907,7 @@ mod tests {
         let mut rows_seen: Vec<BM<String, Node>> = vec![BM::new(), BM::new(), BM::new()];
         let mut frozen: Vec<(PB, BM<String, Vec<u8>>)> = Vec::new();
         for (i, (item, name)) in chain.iter().enumerate() {
-            let s: Spec = Spec { item: item.to_string(), name: name.to_string(), style: Style::Touch, heap: None };
+            let s: Spec = Spec { item: item.to_string(), name: name.to_string(), style: Style::Touch, heap: None, source: None, identity: None };
             let places: Vec<u64> = if i == 0 { vec![SPOT] } else { Vec::new() };
             let o: Opts = Opts { host: Host::Hookshot, base: base.clone(), rst_from: None, places, dry: false };
             let d: Done = run(&root, &load, &format!("step{i}"), &s, &o).unwrap();
@@ -749,7 +960,7 @@ mod tests {
         assert!(frozen[0].1.contains_key(banc));
         assert!(!frozen[2].1.contains_key(banc));
         assert_eq!(frozen[2].1.keys().filter(|k| k.starts_with("Pack/Actor/")).count(), 3);
-        let again: Spec = Spec { item: "Item_Boomerang".to_string(), name: "Obj_Boomerang".to_string(), style: Style::Touch, heap: None };
+        let again: Spec = Spec { item: "Item_Boomerang".to_string(), name: "Obj_Boomerang".to_string(), style: Style::Touch, heap: None, source: None, identity: None };
         let o: Opts = Opts { host: Host::Hookshot, base: base.clone(), rst_from: None, places: Vec::new(), dry: false };
         let d: Done = run(&root, &load, "step2", &again, &o).unwrap();
         assert_eq!(d.carried.len(), 2);
@@ -769,7 +980,7 @@ mod tests {
         let one: Done = run(&root, &load, "one", &hookshot(), &o).unwrap();
         let dir: PB = one.root.unwrap().join("romfs");
         let mut rf: Romfs = Romfs::open(&root).unwrap();
-        let boom: Spec = Spec { item: "Item_Boomerang".to_string(), name: "Obj_Boomerang".to_string(), style: Style::Touch, heap: None };
+        let boom: Spec = Spec { item: "Item_Boomerang".to_string(), name: "Obj_Boomerang".to_string(), style: Style::Touch, heap: None, source: None, identity: None };
         o.base = Some(dir.clone());
         o.dry = true;
         let pl: Plan = {
@@ -803,7 +1014,7 @@ mod tests {
     }
 
     fn spec_of(item: &str, name: &str) -> Spec {
-        Spec { item: item.to_string(), name: name.to_string(), style: Style::Touch, heap: None }
+        Spec { item: item.to_string(), name: name.to_string(), style: Style::Touch, heap: None, source: None, identity: None }
     }
 
     fn file<'a>(d: &'a Done, path: &str) -> &'a File {

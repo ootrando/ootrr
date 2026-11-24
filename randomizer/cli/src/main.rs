@@ -117,8 +117,8 @@ const USAGE: &str = "usage:
   ootrr pots-persist <romfs_root> <load_dir> <mod_name>
   ootrr ap-test-mod <romfs_root> <load_dir> <mod_name> <item_actor>...
   ootrr ap-flag <flag_name> [on|off]
-  ootrr pack-add <romfs_root> <load_dir> <mod_name> <Item_Actor> [--name <Obj_Actor>] [--press] [--heap N] [--host eden|hookshot|longshot|nx2navi] [--base <mod_romfs_dir>] [--rst-from <rsizetable.zs>] [--place <ActorHash>]... [--tag <TagName>]... [--ammo] [--magic] [--own] [--model-from <Actor>] [--dry]
-  ootrr pack-kit <romfs_root> <load_dir> <mod_name> <Item_Actor|Obj_Actor> [--name <Obj_Actor_GS>] [--heap N] [--host eden|hookshot|longshot|nx2navi] [--base <mod_romfs_dir>] [--rst-from <rsizetable.zs>] [--drop <SkulltulaHash>]... [--model-from <Actor>] [--dry]
+  ootrr pack-add <romfs_root> <load_dir> <mod_name> <Item_Actor> [--name <Obj_Actor>] [--press] [--heap N] [--host eden|hookshot|longshot|nx2navi] [--base <mod_romfs_dir>] [--rst-from <rsizetable.zs>] [--place <ActorHash>]... [--tag <TagName>]... [--ammo] [--magic] [--own] [--model-from <Actor>] [--source <TemplateActor>] [--identity <PouchActor>] [--dry]
+  ootrr pack-kit <romfs_root> <load_dir> <mod_name> <Item_Actor|Obj_Actor> [--name <Obj_Actor_GS>] [--heap N] [--host eden|hookshot|longshot|nx2navi] [--base <mod_romfs_dir>] [--rst-from <rsizetable.zs>] [--drop <SkulltulaHash>]... [--model-from <Actor>] [--identity <PouchActor>] [--dry]
   ootrr flags-build <romfs_root> <out_json>
   ootrr flags-lookup <flags_json> <name_or_hash> ...
   ootrr flags-check <romfs_root> <flags_json>

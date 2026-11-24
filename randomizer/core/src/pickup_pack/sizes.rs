@@ -27,6 +27,12 @@ pub fn file_size(rst: &Rst, peers: &[(String, usize)], path: &str, len: usize) -
     u32::try_from(align(len as u64 + over) + FILE_MARGIN).map_err(|_| E::Format("file size does not fit in 32 bits"))
 }
 
+
+
+pub fn event_size(len: usize) -> Res<u32> {
+    u32::try_from(align(len as u64) + FILE_MARGIN).map_err(|_| E::Format("event size does not fit in 32 bits"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -28,15 +28,22 @@ const PARAM: &str = "ActorName";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Item {
     Small,
+
+    Ring(&'static crate::key_rings::Ring),
     Other(Grant),
 }
 
 impl Item {
     pub fn of(kind: &str) -> Option<Item> {
         match kind {
-            "SmallKey" => Some(Item::Small),
+            "SmallKey" | "HideoutSmallKey" => Some(Item::Small),
             k => Grant::of(k).map(Item::Other),
         }
+    }
+
+
+    pub fn of_item(name: &str, kind: &str) -> Option<Item> {
+        crate::key_rings::by_item_any(name).map(Item::Ring).or_else(|| Item::of(kind))
     }
 }
 
@@ -68,12 +75,15 @@ pub fn gifts(d: &Data, seed: &SeedFile) -> Res<Vec<Gift>> {
             continue;
         }
         let Some(i) = d.item(item) else { continue };
-        let Some(k) = Item::of(&i.kind) else { continue };
-        let dungeon: &'static str = i
-            .dungeon
-            .as_deref()
-            .and_then(struct_of)
-            .ok_or_else(|| E::Msg(format!("{item} at {loc} belongs to no dungeon this build can credit")))?;
+        let Some(k) = Item::of_item(item, &i.kind) else { continue };
+        let dungeon: &'static str = match k {
+            Item::Ring(r) => r.folder,
+            _ => i
+                .dungeon
+                .as_deref()
+                .and_then(struct_of)
+                .ok_or_else(|| E::Msg(format!("{item} at {loc} belongs to no dungeon this build can credit")))?,
+        };
         let l = d.flow.by_name(loc).ok_or_else(|| E::Msg(format!("{loc} is not a flow location")))?;
         for e in l.edits.iter().filter(|e| e.role == "grant") {
             for file in std::iter::once(&e.file).chain(e.also.iter()) {
@@ -89,14 +99,18 @@ pub fn marked(gs: &[Gift]) -> BS<(Grant, &'static str)> {
     gs.iter()
         .filter_map(|g| match g.item {
             Item::Other(k) => Some((k, g.dungeon)),
-            Item::Small => None,
+            Item::Small | Item::Ring(_) => None,
         })
         .collect()
 }
 
 /// The dungeons whose small key line the gifts need (crate::hints::stage keys).
 pub fn small_dungeons(gs: &[Gift]) -> Vec<&'static str> {
-    let mut out: Vec<&'static str> = gs.iter().filter(|g| g.item == Item::Small).map(|g| g.dungeon).collect();
+    let mut out: Vec<&'static str> = gs
+        .iter()
+        .filter(|g| matches!(g.item, Item::Small | Item::Ring(_)))
+        .map(|g| g.dungeon)
+        .collect();
     out.sort();
     out.dedup();
     out
@@ -119,6 +133,43 @@ fn action_name(f: &Flow, i: usize) -> Option<String> {
     }
 }
 
+fn add_count(name: String, count: u32) -> Cont {
+    Cont {
+        items: vec![
+            ("Index".to_string(), Val::Int(-1)),
+            ("GameDataName".to_string(), Val::Str(name)),
+            ("Value".to_string(), Val::Int(count as i32)),
+        ],
+    }
+}
+
+
+
+
+
+
+pub fn is_ring_credit(f: &Flow, index: usize) -> bool {
+    let Some(next) = (match f.events.get(index).map(|e| &e.kind) {
+        Some(Kind::Action { next, .. } | Kind::Sub { next, .. }) => Some(*next),
+        _ => None,
+    }) else {
+        return false;
+    };
+    let Some(c) = f.events.get(usize::from(next)).and_then(|e| e.kind.params()) else {
+        return false;
+    };
+    let Some(Val::Str(name)) = c.get("GameDataName") else {
+        return false;
+    };
+    let Some(folder) = name.strip_prefix("DungeonInfo.").and_then(|s| s.strip_suffix(".SmallKeyNum")) else {
+        return false;
+    };
+    let Some(r) = crate::key_rings::by_folder_any(folder) else {
+        return false;
+    };
+    c.get("Value") == Some(&Val::Int(r.count as i32))
+}
+
 /// The credit writes and the dungeon line, ending on `end`. Returns the first event.
 pub fn credit(f: &mut Flow, item: Item, d: &'static str, end: u16) -> Res<u16> {
     let (a, set): (u16, u16) = action_slot(f, HOLDER, SET)?;
@@ -130,6 +181,14 @@ pub fn credit(f: &mut Flow, item: Item, d: &'static str, end: u16) -> Res<u16> {
             push(f, Kind::Action { next: at + 1, actor: a, act: add, params: Some(add_int(flag(d, "SmallKeyNum"))) })?;
             push(f, Kind::Action { next: at + 2, actor: a, act: add, params: Some(add_int(flag(d, "SmallKeyTotalNum"))) })?;
             push(f, Kind::Action { next: at + 3, actor: a, act: set, params: Some(set_bool(flag(d, "IsGetSmallKeyOnce"))) })?;
+            push(f, Kind::Action { next: end, actor: t, act: say, params: Some(talk(crate::dungeon_text::message_id(d))) })?;
+        }
+        Item::Ring(r) => {
+            let (_, add): (u16, u16) = action_slot(f, HOLDER, ADD_INT)?;
+            push(f, Kind::Action { next: at + 1, actor: a, act: add, params: Some(add_count(flag(d, "SmallKeyNum"), r.count)) })?;
+            push(f, Kind::Action { next: at + 2, actor: a, act: add, params: Some(add_count(flag(d, "SmallKeyTotalNum"), r.count)) })?;
+            push(f, Kind::Action { next: at + 3, actor: a, act: set, params: Some(set_bool(flag(d, "IsGetSmallKeyOnce"))) })?;
+            push(f, Kind::Action { next: at + 4, actor: a, act: set, params: Some(set_bool(crate::key_rings::applied_flag(d))) })?;
             push(f, Kind::Action { next: end, actor: t, act: say, params: Some(talk(crate::dungeon_text::message_id(d))) })?;
         }
         Item::Other(k) => {
@@ -153,6 +212,13 @@ pub fn edit_flow(f: &mut Flow, index: usize, event: &str, item: Item, d: &'stati
     if action_name(f, index).as_deref() == Some(ADD) {
         let Kind::Action { next, .. } = f.events[index].kind else { unreachable!() };
         let first: u16 = credit(f, item, d, next)?;
+        if matches!(item, Item::Ring(_)) {
+
+            if let Kind::Action { next, .. } = &mut f.events[index].kind {
+                *next = first;
+            }
+            return Ok(());
+        }
         // The add event itself becomes a jump to the credit: copy the first credit write in place.
         let k: Kind = f.events[first as usize].kind.clone();
         f.events[index].kind = k;
@@ -163,6 +229,13 @@ pub fn edit_flow(f: &mut Flow, index: usize, event: &str, item: Item, d: &'stati
         _ => return Err(E::Msg(format!("gift keys: {event} in {} is not a give, the game files differ", f.name))),
     };
     let first: u16 = credit(f, item, d, next)?;
+    if matches!(item, Item::Ring(_)) {
+
+        if let Kind::Sub { next, .. } = &mut f.events[index].kind {
+            *next = first;
+        }
+        return Ok(());
+    }
     let k: &mut Kind = &mut f.events[index].kind;
     let Kind::Sub { next, params, flow, entry } = k else { unreachable!() };
     *next = first;
@@ -220,6 +293,7 @@ pub fn apply(rf: &mut Romfs, files: &mut Vec<StagedFile>, gs: &[Gift], extra: &[
             }
         };
         let w: Option<String> = match &call {
+            Some(_) if matches!(g.item, Item::Ring(_)) => None,
             Some((fl, en)) if g.item == Item::Small => Some(crate::item_window::key_window(&mut c, rf, files, fl, en)?),
             Some((fl, en)) => Some(crate::item_window::window(&mut c, rf, files, fl, en)?),
             None => None,
@@ -249,6 +323,18 @@ mod tests {
         }
         let mut rf: Romfs = Romfs::open(&p).unwrap();
         let z: Vec<u8> = rf.read("Event/EventFlow/SageOfFire.bfevfl.zs").unwrap();
+        let b: Bf = Bf::parse(&rf.zs.decompress(&z).unwrap()).unwrap();
+        Some((rf, b))
+    }
+
+    fn gift_scene() -> Option<(Romfs, Bf)> {
+        let p: std::path::PathBuf = ootrr_game::test_romfs::path();
+        if !p.is_dir() {
+            eprintln!("skipped: no romfs at {}, set OOTRR_ROMFS", p.display());
+            return None;
+        }
+        let mut rf: Romfs = Romfs::open(&p).unwrap();
+        let z: Vec<u8> = rf.read("Event/EventFlow/Dm_Kokiri_0155.bfevfl.zs").unwrap();
         let b: Bf = Bf::parse(&rf.zs.decompress(&z).unwrap()).unwrap();
         Some((rf, b))
     }
@@ -346,5 +432,20 @@ mod tests {
         assert!(f.actors.iter().any(|a| a.sub == "GetInEvent_NotTurn(Npc_EventStarter)" && a.ep == orig), "the original entry keeps its own NPC");
         // The shown item still comes from the caller's ActorName (an argument, not a literal).
         assert!(shown);
+    }
+
+
+
+    #[test]
+    fn a_ring_gift_survives_the_shortened_gift_scene() {
+        for ring in crate::key_rings::all_with_hideout() {
+            let Some((_, mut b)) = gift_scene() else { return };
+            let f: &mut Flow = b.flows.first_mut().unwrap();
+            edit_flow(f, 51, "Event68", Item::Ring(ring), ring.folder, None).unwrap();
+            assert!(is_ring_credit(f, 51), "{}", ring.item);
+            crate::story_skip::patch_gift(&mut b).unwrap();
+            let f: &mut Flow = b.flows.first_mut().unwrap();
+            assert!(is_ring_credit(f, 51), "the shortened gift no longer runs the {} credit", ring.item);
+        }
     }
 }

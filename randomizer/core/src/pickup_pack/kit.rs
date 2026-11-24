@@ -233,8 +233,8 @@ pub fn plan_with(packs: &[Vec<Entry>], s: &Spec, l: &Layers) -> Res<Plan> {
     if !l.kit_ok() {
         return Err(E::Format("pickup kit: only the model layer can ride on a kit"));
     }
-    if !is_actor_name(&s.name) || !is_actor_name(&s.item) {
-        return Err(E::Msg(format!("{} or {} is not a plain actor name", s.name, s.item)));
+    if !is_actor_name(&s.name) || !is_actor_name(&s.item) || s.identity.as_deref().is_some_and(|id| !is_actor_name(id)) {
+        return Err(E::Msg(format!("{}, {} or an override is not a plain actor name", s.name, s.item)));
     }
     if s.style == Style::Press {
         return Err(E::Format("pickup kit: the press style is not built for kit pickups, a kit is always taken by touch and falls to the floor, so that it can be reached below a wall or vine skulltula"));
@@ -622,8 +622,8 @@ pub fn run(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts, drops: &[u64
 }
 
 pub fn run_with(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts, drops: &[u64], l: &Layers) -> Res<Done> {
-    if !is_actor_name(&s.name) || !is_actor_name(&s.item) {
-        return Err(E::Msg(format!("{} or {} is not a plain actor name", s.name, s.item)));
+    if !is_actor_name(&s.name) || !is_actor_name(&s.item) || s.identity.as_deref().is_some_and(|id| !is_actor_name(id)) {
+        return Err(E::Msg(format!("{}, {} or an override is not a plain actor name", s.name, s.item)));
     }
     if !o.places.is_empty() {
         return Err(E::Format("pickup kit: a kit pickup is only for skulltula drops, at a placed spot it would write the saved rows of no skulltula"));
@@ -787,7 +787,7 @@ mod tests {
     }
 
     fn kit(item: &str) -> Spec {
-        Spec { item: item.to_string(), name: default_kit(item), style: Style::Touch, heap: None }
+        Spec { item: item.to_string(), name: default_kit(item), style: Style::Touch, heap: None, source: None, identity: None }
     }
 
     fn temp(tag: &str) -> PB {
@@ -851,7 +851,7 @@ mod tests {
 
     #[test]
     fn a_shipped_pickup_kit_is_a_thin_child_with_its_own_pouch_file() {
-        let sp: Spec = Spec { item: DONOR.to_string(), name: name_of(DONOR), style: Style::Touch, heap: None };
+        let sp: Spec = Spec { item: DONOR.to_string(), name: name_of(DONOR), style: Style::Touch, heap: None, source: None, identity: None };
         let mut packs: Vec<Vec<Entry>> = toy_packs();
         packs[0].push(Entry { name: pouch_file(DONOR), data: file(&[("A", Node::Bool(true))]) });
         let i: usize = packs[0].iter().position(|e| e.name == actor_file(DONOR)).unwrap();
@@ -894,7 +894,7 @@ mod tests {
     }
 
     fn own_parts(packs: &[Vec<Entry>]) -> (Vec<String>, Option<Node>) {
-        let sp: Spec = Spec { item: "Obj_Soft".to_string(), name: "Obj_Soft_GS".to_string(), style: Style::Touch, heap: None };
+        let sp: Spec = Spec { item: "Obj_Soft".to_string(), name: "Obj_Soft_GS".to_string(), style: Style::Touch, heap: None, source: None, identity: None };
         let pl: Plan = plan(packs, &sp).unwrap();
         let es: Vec<Entry> = sarc::parse(&pl.sarc).unwrap();
         let a: Byml = Byml::parse(&sarc::get(&es, &actor_file(&sp.name)).unwrap().data).unwrap();
@@ -930,7 +930,7 @@ mod tests {
 
     #[test]
     fn the_token_a_press_kit_a_taken_name_and_a_foreign_binary_are_refused() {
-        let tok: Spec = Spec { item: TOKEN.to_string(), name: "Obj_Token_Gold_GS".to_string(), style: Style::Touch, heap: None };
+        let tok: Spec = Spec { item: TOKEN.to_string(), name: "Obj_Token_Gold_GS".to_string(), style: Style::Touch, heap: None, source: None, identity: None };
         assert!(plan(&toy_packs(), &tok).is_err());
         assert!(plan(&toy_packs(), &Spec { style: Style::Press, ..kit_spec() }).is_err());
         assert!(plan(&toy_packs(), &Spec { name: "Item_Test".to_string(), ..kit_spec() }).is_err());

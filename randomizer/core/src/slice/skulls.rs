@@ -97,7 +97,7 @@ pub fn drop_actor(t: &Table, d: &Data, item: &str, tier: Option<&str>) -> Res<St
     if let Some(a) = pickup(t, d, item) {
         return Ok(crate::slice::skull_kit::kit_actor(&a));
     }
-    let p: crate::slice::key_spots::Pick = crate::slice::key_spots::resolve_kit(d, item, tier)?;
+    let p: crate::slice::key_spots::Pick = crate::slice::key_spots::resolve_drop(d, item, tier)?;
     p.hang_with()?;
     Ok(p.hang())
 }

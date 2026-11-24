@@ -399,7 +399,7 @@ mod tests {
         assert_eq!(Kind::of_actor("Item_Dungeon_SmallKey"), None);
         assert_eq!(struct_of("Ganons Castle"), Some("InsideGanonCastle"));
         assert_eq!(struct_of("Deku Tree"), Some("InsideTheDekuTree"));
-        assert_eq!(struct_of("Thieves Hideout"), None);
+        assert_eq!(struct_of("Thieves Hideout"), Some("GerudoFortress"));
         assert_eq!(event_name(Kind::Boss, "FireTemple", Size::Big), "OOTRR_Boss_FireTemple_Big");
         assert_eq!(entry_name(Kind::Map, "IceCavern"), "Success_Map_IceCavern");
         assert_eq!(message_id(Kind::Boss, "ForestTemple"), "EventFlowMsg/Dm_SY_Get:OOTRR_BossKey_ForestTemple");

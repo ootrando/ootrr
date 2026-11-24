@@ -218,7 +218,7 @@ const JABU: View = View {
 const CARPENTERS: View = View {
     id: "gerudo_fortress",
     label: "Fortress Carpenters",
-    tip: "Sets the state of the carpenters captured by Gerudo in Gerudo Fortress, and with it the number of guards that spawn.\n\nNormal - All 4 carpenters are required to be saved.\n\nFast - Tested in game. Three carpenters start free. The guard gives the Membership Card check when the last carpenter is rescued: the card itself, or a random item when Shuffle Gerudo Membership Card is on.\n\nOpen - Tested in game. Start with the Gerudo Membership Card and the bridge built. The Membership Card check is still in the game and randomized. It triggers when you interact with your first jail cell.\n\nOnly \"Normal\" is compatible with Gerudo Fortress Keyrings.",
+    tip: "Sets the state of the carpenters captured by Gerudo in Gerudo Fortress, and with it the number of guards that spawn.\n\nNormal - All 4 carpenters are required to be saved.\n\nFast - Tested in game. Three carpenters start free. The guard gives the Membership Card check when the last carpenter is rescued: the card itself, or a random item when Shuffle Gerudo Membership Card is on.\n\nOpen - Tested in game. Start with the Gerudo Membership Card and the bridge built. The Membership Card check is still in the game and randomized. It triggers when you interact with your first jail cell.\n\nOnly \"Open\" is compatible with shuffled Gerudo Fortress Keys and the Hideout Key Ring.",
     kind: Kind::Pick,
     opts: &[
         yes("Normal", "normal"),
@@ -316,7 +316,7 @@ const GERUDO_KEYS: View = View {
     label: "Gerudo Fortress Keys",
     tip: "Vanilla - Thieves' Hideout Keys will appear in their vanilla locations.\n\nAny dungeon - Thieves' Hideout Keys can only appear inside of any dungeon.\n\nOverworld - Thieves' Hideout Keys can only appear outside of dungeons.\n\nAnywhere - Thieves' Hideout Keys can appear anywhere in the world.",
     kind: Kind::Pick,
-    opts: &[yes("Vanilla", "vanilla"), broken("Any Dungeon", "any_dungeon"), broken("Overworld", "overworld"), broken("Anywhere", "keysanity")],
+    opts: &[yes("Vanilla", "vanilla"), yes("Any Dungeon", "any_dungeon"), broken("Overworld", "overworld"), yes("Anywhere", "keysanity")],
 };
 
 pub struct PortSection {
@@ -471,15 +471,6 @@ const DUNGEONS_TAB: &[PortSection] = &[
                         "Shuffles 8 boss souls (one for each blue warp dungeon). A boss will not appear until you collect its respective soul.",
                     ),
                 ],
-            ),
-            port(
-                "Keyrings",
-                &[gray_pick(
-                    "Keyrings",
-                    &["Off", "Random", "Count", "Selection"],
-                    0,
-                    "Keyrings will replace all small keys from a particular dungeon with a single keyring that awards all keys for its associated dungeon.\n\nOff - No dungeons will have their keys replaced with keyrings.\n\nRandom - A random amount of dungeons will have their keys replaced with keyrings.\n\nCount - A specified amount of randomly selected dungeons will have their keys replaced with keyrings.\n\nSelection - Hand select which dungeons will have their keys replaced with keyrings\n(can also be left as random, in which case each one will have a 50% chance of being a keyring).\n\nSelecting keyring for dungeons will have no effect if Small Keys are set to Start With or Vanilla.\n\nThe maximum amount of Keyrings that can be selected by Random or Count is 8, plus one if Gerudo Fortress Carpenters is set to Normal and Gerudo Fortress Keys is set to anything other than Vanilla, plus one if Shuffle Chest Minigame is on.",
-                )],
             ),
         ];
 
@@ -781,6 +772,15 @@ pub const MENU: &[Page] = &[
             sec("Boss fights", &["boss_minibosses", "boss_minions"]),
             sec("Minigames", &["unbreakable_bowling_grass", "harder_talon_cuccos"]),
         ],
+    },
+    Page {
+        id: "key_rings",
+        label: "Key Rings",
+        heading: IN_DEV,
+        sections: &[sec(
+            "Key Rings",
+            &[crate::key_rings::SETTING, crate::key_rings::MODE_SETTING, crate::key_rings::COUNT_SETTING, crate::key_rings::SELECTION_SETTING, crate::key_rings::HIDEOUT_SETTING],
+        )],
     },
     Page { id: "cosmetics", label: "Cosmetics", heading: GAMEPLAY, sections: &[sec("Looks", &["mega_like_likes"])] },
     Page { id: "debug", label: "Debug", heading: DEBUG, sections: &[sec("Debug", &["debug_location_names"]), sec("Spawn enemies", &["enemy_spawn_combo"])] },

@@ -52,7 +52,7 @@ mod tests {
     }
 
     fn spec(item: &str, name: &str) -> Spec {
-        Spec { item: item.to_string(), name: name.to_string(), style: Style::Touch, heap: None }
+        Spec { item: item.to_string(), name: name.to_string(), style: Style::Touch, heap: None, source: None, identity: None }
     }
 
     fn opts(base: Option<PB>, dry: bool) -> Opts {

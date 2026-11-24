@@ -30,6 +30,42 @@ pub fn setting_verdict(s: &Spot) -> Option<bool> {
     SETTING_RULES.iter().find_map(|(_, r)| r(s))
 }
 
+pub const RULES: [(&str, Rule); 2] = [
+    ("native hideout guard drops", native_hideout),
+    ("hideout small keys", hideout_key),
+];
+
+pub fn verdict(s: &Spot) -> Option<bool> {
+    RULES.iter().find_map(|(_, r)| r(s))
+}
+
+fn native_hideout(s: &Spot) -> Option<bool> {
+    if !crate::hideout_keys::is_native(s.name) {
+        return None;
+    }
+    let i: &crate::slice::data::Item = s.d.item(s.item)?;
+    Some(crate::gerudo_drops::eligible(s.d, &i.name))
+}
+
+fn hideout_key(s: &Spot) -> Option<bool> {
+    if s.p.hideout == crate::slice::support::Keep::Vanilla {
+        return None;
+    }
+    let i: &crate::slice::data::Item = s.d.item(s.item)?;
+    if i.kind != "HideoutSmallKey" {
+        return None;
+    }
+    let here: Option<&str> = s.w.regions[s.w.locs[s.l].region].dungeon.as_deref();
+    let dungeon: bool = here.is_some();
+    let place: bool = match s.p.hideout {
+        crate::slice::support::Keep::AnyDungeon => dungeon,
+        _ => true,
+    };
+    let chest: bool = s.d.flow.by_name(s.name).is_none() && !s.d.special(s.name) && crate::slice::dungeon_items::chest_ok(s.d, s.name) && s.d.cat.by_name(s.name).is_some_and(|c| c.kind == "chest");
+    let gift: bool = crate::gift_keys::spot(s.d, s.name);
+    Some(place && i.dungeon.is_some() && (chest || gift))
+}
+
 /// The adult trade chain keeps its items at home: the sequence is not shuffled, unless adult trade
 /// shuffle makes each trade item its own item (crate::open_world::trade_shuffle).
 fn adult_trade(s: &Spot) -> Option<bool> {

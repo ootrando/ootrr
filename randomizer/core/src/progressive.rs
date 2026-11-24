@@ -651,9 +651,14 @@ pub struct Built {
 }
 
 pub fn stage(rf: &mut Romfs, used: &BS<(String, Size)>, scale: Option<(f32, i32)>, kids: &[(String, String)], keys: &[&str]) -> Res<Vec<Out>> {
+    stage_with(rf, used, scale, kids, keys, &[])
+}
+
+
+pub fn stage_with(rf: &mut Romfs, used: &BS<(String, Size)>, scale: Option<(f32, i32)>, kids: &[(String, String)], keys: &[&str], rings: &[&'static str]) -> Res<Vec<Out>> {
     let mut outs: Vec<Out> = Vec::new();
     let mut sizes: BS<Size> = used.iter().map(|u| u.1).collect();
-    if !keys.is_empty() {
+    if !keys.is_empty() || !rings.is_empty() {
         sizes.extend([Size::Small, Size::Big]);
     }
     for s in &sizes {
@@ -670,6 +675,9 @@ pub fn stage(rf: &mut Romfs, used: &BS<(String, Size)>, scale: Option<(f32, i32)
             if !keys.is_empty() {
                 crate::dungeon_credit::credit_keys(flow, keys, *s == Size::Big)?;
             }
+            if !rings.is_empty() {
+                crate::dungeon_credit::credit_rings(flow, rings)?;
+            }
             if let Some((factor, min)) = scale {
                 scale_waits(&mut bf, factor, min);
             }
@@ -684,10 +692,14 @@ pub fn stage(rf: &mut Romfs, used: &BS<(String, Size)>, scale: Option<(f32, i32)
                 let e: Option<String> = if analyzed { None } else { Some(entry_name(fam)) };
                 m.entry(*s).or_default().push((event_name(fam, *s), e));
             }
-            for s in [Size::Small, Size::Big].into_iter().filter(|_| !keys.is_empty()) {
+            for s in [Size::Small, Size::Big].into_iter().filter(|_| !keys.is_empty() || !rings.is_empty()) {
                 for d in keys {
                     let e: Option<String> = if analyzed { None } else { Some(crate::dungeon_credit::entry_name(d)) };
                     m.entry(s).or_default().push((crate::dungeon_credit::event_name(d, s), e));
+                }
+                for d in rings {
+                    let e: Option<String> = if analyzed { None } else { Some(crate::dungeon_credit::ring_entry_name(d)) };
+                    m.entry(s).or_default().push((crate::dungeon_credit::ring_event_name(d, s), e));
                 }
             }
             m

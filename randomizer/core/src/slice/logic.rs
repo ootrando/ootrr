@@ -71,8 +71,30 @@ pub fn spec(d: &Data, over: &[(&str, &str)]) -> Res<Spec> {
     // condition. Otherwise they are not progress, so the fill may put them where the logic never
     // goes (a Piece of Heart behind a bean spot nobody can plant).
     let hearts: bool = HEART_GOALS.iter().any(|k| s.settings.get(k) == Some(&Val::Str("hearts".to_string())));
+    let rings: bool = s.settings.flag(crate::key_rings::SETTING);
+    let hideout_ring: bool = s.settings.flag(crate::key_rings::HIDEOUT_SETTING);
+    let rs: Vec<&'static crate::key_rings::Ring> = if rings {
+        let picked: Vec<&'static crate::key_rings::Ring> = crate::key_rings::RINGS
+            .iter()
+            .filter(|r| s.settings.flag(r.select))
+            .collect();
+
+        if picked.is_empty() { crate::key_rings::RINGS.iter().collect() } else { picked }
+    } else {
+        Vec::new()
+    };
     for it in &d.items {
         let heart: bool = crate::slice::generate::HEARTS.iter().any(|h| it.name.starts_with(h));
+        if let Some(r) = crate::key_rings::by_item_any(&it.name) {
+            let active: bool = rs.iter().any(|x| x.item == r.item)
+                || (hideout_ring && r.item == crate::key_rings::HIDEOUT_RING.item);
+            if active {
+                s.add_ring(r.item, r.key, r.count);
+            } else {
+                s.add_item(&it.name, it.adv && (hearts || !heart), 0);
+            }
+            continue;
+        }
         s.add_item(&it.name, it.adv && (hearts || !heart), 0);
     }
     s.add_helpers(HELPERS)?;

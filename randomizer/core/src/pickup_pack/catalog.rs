@@ -113,7 +113,7 @@ pub fn load() -> Res<Vec<Entry>> {
 }
 
 pub fn spec(item: &str, a: &[String]) -> Res<(Spec, Layers)> {
-    let mut s: Spec = Spec { item: item.to_string(), name: default_name(item), style: Style::Touch, heap: None };
+    let mut s: Spec = Spec { item: item.to_string(), name: default_name(item), style: Style::Touch, heap: None, source: None, identity: None };
     let mut l: Layers = Layers::default();
     let mut i: usize = 0;
     while i < a.len() {
@@ -150,8 +150,38 @@ pub fn spec(item: &str, a: &[String]) -> Res<(Spec, Layers)> {
                 l.model = Some(v.to_string());
                 2
             }
+            ("--pouch-from", Some(v)) => {
+                if !crate::pickup_pack::is_actor_name(v) {
+                    return Err(E::Msg(format!("pickup pack catalog: {v} is not a plain actor name")));
+                }
+                l.pouch_from = Some(v.to_string());
+                2
+            }
+            ("--ring", Some(v)) => {
+                if !crate::pickup_pack::is_actor_name(v) {
+                    return Err(E::Msg(format!("pickup pack catalog: {v} is not a plain actor name")));
+                }
+                l.ring = Some(v.to_string());
+                2
+            }
+            ("--drop-ring", Some(v)) => {
+                if !crate::pickup_pack::is_actor_name(v) {
+                    return Err(E::Msg(format!("pickup pack catalog: {v} is not a plain actor name")));
+                }
+                l.ring = Some(v.to_string());
+                l.drop_ring = true;
+                2
+            }
             ("--heap", Some(v)) => {
                 s.heap = Some(v.parse().map_err(|_| E::Msg(format!("pickup pack catalog: {v} is not a heap size")))?);
+                2
+            }
+            ("--source", Some(v)) => {
+                s.source = Some(v.to_string());
+                2
+            }
+            ("--identity", Some(v)) => {
+                s.identity = Some(v.to_string());
                 2
             }
             (x, _) => return Err(E::Msg(format!("pickup pack catalog: {x} is not a pack option or lacks its value"))),
@@ -239,17 +269,58 @@ mod tests {
     #[test]
     fn the_options_of_an_entry_become_a_spec_and_its_layers() {
         let (s, l): (Spec, Layers) = spec("Item_Hookshot", &strs(&["--heap", "199928", "--host", "hookshot"])).unwrap();
-        assert_eq!(s, Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot".to_string(), style: Style::Touch, heap: Some(199928) });
+        assert_eq!(s, Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot".to_string(), style: Style::Touch, heap: Some(199928), source: None, identity: None });
         assert!(l.plain());
         let (s, l): (Spec, Layers) = spec("Item_Bottle_Letter", &strs(&["--name", "Obj_Bottle_LetterLand", "--tag", "LetterBottle", "--tag", "LetterBottle"])).unwrap();
         assert_eq!(s.name, "Obj_Bottle_LetterLand");
-        assert_eq!(l, Layers { tags: strs(&["LetterBottle"]), ammo: false, magic: false, model: None, spin: false, lift: 0, own: false, pose: None });
+        assert_eq!(l, Layers { tags: strs(&["LetterBottle"]), ammo: false, magic: false, model: None, pouch_from: None, ring: None, drop_ring: false, spin: false, lift: 0, own: false, pose: None });
         let (s, l): (Spec, Layers) = spec("Item_Range_Bow", &strs(&["--ammo", "--magic", "--press"])).unwrap();
         assert_eq!(s.style, Style::Press);
         assert!(l.ammo && l.magic);
         assert!(spec("Item_Hookshot", &strs(&["--place", "7"])).is_err());
         assert!(spec("Item_Hookshot", &strs(&["--heap"])).is_err());
         assert!(spec("Item_Hookshot", &strs(&["--heap", "big"])).is_err());
+    }
+
+    #[test]
+    fn key_ring_entries_split_the_template_from_the_saved_identity() {
+        let all: Vec<Entry> = load().unwrap();
+        for r in crate::key_rings::all_with_hideout() {
+            let e: &Entry = all.iter().find(|e| e.item == r.actor).unwrap();
+            assert_eq!(e.status, Status::Built, "{}", r.actor);
+            assert_eq!(e.identity.as_deref(), Some(r.actor), "{}", r.actor);
+            let (s, l): (Spec, Layers) = spec(&e.item, &e.args).unwrap();
+            assert_eq!(s.item, r.actor, "{}", r.actor);
+            assert_eq!(s.name, e.pack.clone().unwrap(), "{}", r.actor);
+            assert_eq!(s.name, crate::key_rings::pack(r.actor), "{}", r.actor);
+            assert_eq!(s.source(), "Item_Dungeon_SmallKey", "{}", r.actor);
+            assert_eq!(s.identity_override(), Some(r.actor), "{}", r.actor);
+            assert_eq!(l.pouch_from.as_deref(), Some("Item_Medal_Forest"), "{}", r.actor);
+            assert_eq!(l.ring.as_deref(), Some(r.actor), "{}", r.actor);
+            assert!(!l.plain(), "{}", r.actor);
+        }
+    }
+
+    #[test]
+    fn drop_ring_entries_keep_the_saved_ring_but_use_a_world_pickup_body() {
+        let all: Vec<Entry> = load().unwrap();
+        for r in crate::key_rings::all_with_hideout() {
+            let e: &Entry = all.iter().find(|e| e.item == r.drop_item).unwrap();
+            assert_eq!(e.status, Status::Built, "{}", r.drop_item);
+            assert_eq!(e.identity.as_deref(), Some(r.actor), "{}", r.drop_item);
+            let (s, l): (Spec, Layers) = spec(&e.item, &e.args).unwrap();
+            assert_eq!(s.item, r.drop_item, "{}", r.drop_item);
+            assert_eq!(s.name, e.pack.clone().unwrap(), "{}", r.drop_item);
+            assert_eq!(s.name, r.drop_actor, "{}", r.drop_item);
+            assert_eq!(s.source(), "Item_Dungeon_SmallKey", "{}", r.drop_item);
+            assert_eq!(s.identity_override(), Some(r.actor), "{}", r.drop_item);
+            assert_eq!(l.pouch_from.as_deref(), Some("Item_Medal_Forest"), "{}", r.drop_item);
+            assert_eq!(l.ring.as_deref(), Some(r.actor), "{}", r.drop_item);
+            assert!(l.drop_ring, "{}", r.drop_item);
+            assert!(!l.plain(), "{}", r.drop_item);
+        }
+        let (_, event): (Spec, Layers) = spec("Item_Ring_Forest", &strs(&["--ring", "Item_Ring_Forest"])).unwrap();
+        assert!(!event.drop_ring);
     }
 
     #[test]
@@ -285,8 +356,16 @@ mod tests {
                 let d: Done = run_with(&root, P::new("unused"), "unused", &s, &o, &l).unwrap_or_else(|x| panic!("{} {a:?}: {x}", e.item));
                 assert!(d.root.is_none(), "{}", e.item);
                 assert_eq!(d.files[0].path, pack_of(&s.name), "{}", e.item);
-                assert_eq!(Some(written(&d, &s.name)), e.identity, "{} {a:?}", e.item);
-                assert!(d.report.contains("stays collected once taken"), "{}", e.item);
+
+
+                let identity: String = if l.ring.is_some() {
+                    s.identity_override().unwrap().to_string()
+                } else {
+                    written(&d, &s.name)
+                };
+                assert_eq!(Some(identity.as_str()), e.identity.as_deref(), "{} {a:?}", e.item);
+                let guard: &str = if l.ring.is_some() && !l.drop_ring { "is a saved key item" } else { "stays collected once taken" };
+                assert!(d.report.contains(guard), "{} {:?}: {}", e.item, a, d.report);
                 let again: Done = run_with(&root, P::new("unused"), "unused", &s, &o, &l).unwrap();
                 assert!(same(&d, &again), "{} {a:?}", e.item);
             }

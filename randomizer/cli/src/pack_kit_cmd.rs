@@ -12,7 +12,7 @@ fn arg<'a>(a: &'a [String], i: usize, what: &'static str) -> Res<&'a str> {
 
 pub fn parse(a: &[String]) -> Res<(Spec, Opts, Vec<u64>, Layers)> {
     let item: &str = arg(a, 3, "missing Item_Actor or Obj_Actor")?;
-    let mut s: Spec = Spec { item: item.to_string(), name: default_kit(item), style: Style::Touch, heap: None };
+    let mut s: Spec = Spec { item: item.to_string(), name: default_kit(item), style: Style::Touch, heap: None, source: None, identity: None };
     let mut o: Opts = Opts { host: Host::Eden, base: None, rst_from: None, places: Vec::new(), dry: false };
     let mut drops: Vec<u64> = Vec::new();
     let mut l: Layers = Layers::default();
@@ -47,6 +47,10 @@ pub fn parse(a: &[String]) -> Res<(Spec, Opts, Vec<u64>, Layers)> {
             }
             "--model-from" => {
                 l.model = Some(arg(a, i + 1, "missing model donor actor")?.to_string());
+                2
+            }
+            "--identity" => {
+                s.identity = Some(arg(a, i + 1, "missing pouch identity actor")?.to_string());
                 2
             }
             "--drop" => {
@@ -95,10 +99,11 @@ mod tests {
 
     #[test]
     fn drops_and_the_shared_options_are_read() {
-        let a: Vec<String> = args(&["r", "l", "m", "Item_Hookshot", "--drop", "2504273934093629549", "--drop", "7", "--name", "Obj_Hook_GS", "--heap", "200000", "--host", "hookshot", "--base", "x/romfs", "--rst-from", "t.zs", "--dry"]);
+        let a: Vec<String> = args(&["r", "l", "m", "Item_Hookshot", "--drop", "2504273934093629549", "--drop", "7", "--name", "Obj_Hook_GS", "--heap", "200000", "--host", "hookshot", "--base", "x/romfs", "--rst-from", "t.zs", "--identity", "Item_Ring_Forest", "--dry"]);
         let (s, o, drops, _): (Spec, Opts, Vec<u64>, Layers) = parse(&a).unwrap();
         assert_eq!(drops, vec![2504273934093629549, 7]);
         assert_eq!(s.name, "Obj_Hook_GS");
+        assert_eq!(s.identity_override(), Some("Item_Ring_Forest"));
         assert_eq!(s.heap, Some(200000));
         assert_eq!(o.host, Host::Hookshot);
         assert!(o.dry && o.base.is_some() && o.rst_from.is_some());

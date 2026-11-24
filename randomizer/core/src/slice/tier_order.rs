@@ -65,6 +65,7 @@ pub fn fixed_spot(d: &Data, loc: &str) -> bool {
     crate::pot_slice::targets::is_loc(d, loc)
         || crate::shops::is_loc(loc)
         || crate::slice::skulls::is_skull(d, loc)
+        || crate::hideout_keys::is_native(loc)
         || loc == crate::slice::treasure::LOC
         || d.cat.by_name(loc).is_some_and(|l| crate::slice::pickups::is_world(l) || l.kind == "bossheart")
 }

@@ -124,7 +124,7 @@ pub fn make(rf: &mut Romfs, base: Option<&PB>, item: &str, model: Option<&str>, 
     let mut actor: Node = Node::Map(Vec::new());
     actor.set(PARENT, s(&work(&actor_file(BASE))));
     actor.set(COMPONENTS, comps);
-    let sp: Spec = Spec { item: item.to_string(), name: name.to_string(), style: Style::Touch, heap: None };
+    let sp: Spec = Spec { item: item.to_string(), name: name.to_string(), style: Style::Touch, heap: None, source: None, identity: None };
     let who: String = shelf_identity(&identity(&p, &sp, &it, &item_pouch)?).to_string();
     let mut pouch: Node = Node::Map(Vec::new());
     pouch.set(PARENT, s(&work(&item_pouch)));

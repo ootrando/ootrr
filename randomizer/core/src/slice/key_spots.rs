@@ -150,6 +150,12 @@ fn family(i: &Item) -> Option<&'static str> {
     family_of(&i.tiers)
 }
 
+fn content_of(i: &Item) -> String {
+
+
+    crate::key_rings::by_item_any(&i.name).map(|r| r.actor.to_string()).unwrap_or_else(|| i.actor.clone().unwrap_or_default())
+}
+
 pub fn contents(d: &Data, item: &str) -> Vec<String> {
     let Some(i) = d.item(item) else {
         return Vec::new();
@@ -161,7 +167,7 @@ pub fn contents(d: &Data, item: &str) -> Vec<String> {
     match family(i) {
         Some(f) if TOP_ONLY.contains(&f) => i.tiers.last().cloned().into_iter().collect(),
         Some(_) => i.tiers.clone(),
-        None => i.actor.clone().into_iter().collect(),
+        None => Some(content_of(i)).into_iter().collect(),
     }
 }
 
@@ -208,7 +214,7 @@ pub fn resolve(d: &Data, item: &str, tier: Option<&str>) -> Res<Pick> {
         (Some(t), _) => t.to_string(),
         (None, Some(f)) if TOP_ONLY.contains(&f) => i.tiers.last().cloned().unwrap_or_default(),
         (None, Some(_)) => return Err(E::Msg(format!("{item} is an upgrade, the tier order names no tier for its spot"))),
-        (None, None) => i.actor.clone().unwrap_or_default(),
+        (None, None) => content_of(i),
     };
     if !contents(d, item).contains(&content) {
         return Err(E::Msg(format!("{item} as {content} has no pickup pack this build can place yet")));
@@ -225,6 +231,35 @@ pub fn resolve_kit(d: &Data, item: &str, tier: Option<&str>) -> Res<Pick> {
     }
     let p: Pick = resolve(d, item, tier)?;
     kit_pick(&p.content).ok_or_else(|| E::Msg(format!("{item} has no pickup pack a kit can carry ({})", p.content)))
+}
+
+
+
+pub fn world_spot(d: &Data, loc: &str) -> bool {
+    d.pots.has(loc)
+        || crate::slice::skulls::is_skull(d, loc)
+        || crate::hideout_keys::is_native(loc)
+        || d.cat.by_name(loc).is_some_and(crate::slice::pickups::on_ground)
+}
+
+pub fn resolve_drop(d: &Data, item: &str, tier: Option<&str>) -> Res<Pick> {
+    let Some(r) = crate::key_rings::by_item_any(item) else {
+        return resolve_kit(d, item, tier);
+    };
+
+
+    let _ = tier;
+    pick(&r.drop_item).ok_or_else(|| E::Msg(format!("{item} has no drop-form pickup pack this build can place")))
+}
+
+pub fn resolve_at(d: &Data, loc: &str, item: &str, tier: Option<&str>) -> Res<Pick> {
+    if crate::key_rings::is_any_ring(item) && world_spot(d, loc) {
+        resolve_drop(d, item, tier)
+    } else if crate::slice::skulls::is_skull(d, loc) {
+        resolve_kit(d, item, tier)
+    } else {
+        resolve(d, item, tier)
+    }
 }
 
 pub fn top(f: &str) -> Option<&'static str> {
@@ -277,7 +312,7 @@ pub fn spoiler(d: &Data, w: &World, free: &[LocId], got: &Placement, assign: &BM
             continue;
         }
         let held: bool = d.pots.has(name);
-        let actor: String = match resolve(d, item, assign.get(name).map(|s| s.as_str())) {
+        let actor: String = match resolve_at(d, name, item, assign.get(name).map(|s| s.as_str())) {
             Ok(p) if crate::slice::skulls::is_skull(d, name) => p.hang(),
             Ok(p) => p.pack.clone(),
             Err(_) if held && crate::pot_slice::pickup::of(item).is_some_and(|a| !crate::pot_slice::pickup::refill(a)) => crate::pickup_pack::fall::dropped(crate::pot_slice::pickup::of(item).unwrap_or("")),
@@ -423,6 +458,55 @@ mod tests {
         assert_eq!(k.item, "Item_Hookshot");
         assert_eq!(k.heap, Some(199928));
         assert!(pick("Item_Range_Bow").unwrap().kit_spec().is_err());
+    }
+
+    #[test]
+    fn all_rings_resolve_to_generated_packs_at_every_pickup_spot() {
+        let d: Data = d();
+        let pot: String = d.pots.state.iter().filter(|(n, s)| **s == crate::slice::data::State::Eligible && crate::slice::copies::copies(&d, n) < 2).map(|(n, _)| n.clone()).min().unwrap();
+        let free: &str = "LLR Freestanding PoH";
+        let skull: &str = "KF GS Bean Patch";
+        let chest: &str = "KF Midos Top Left Chest";
+        let gift: &str = "LW Gift from Saria";
+        let native: &str = crate::hideout_keys::NATIVE[0];
+        for r in crate::key_rings::all_with_hideout() {
+            let event_pack: String = crate::key_rings::pack(r.actor);
+            assert_eq!(contents(&d, r.item), vec![r.actor.to_string()], "{}", r.item);
+            let p: Pick = resolve(&d, r.item, None).unwrap_or_else(|e| panic!("{}: {e}", r.item));
+            assert_eq!(p.pack, event_pack, "{}", r.item);
+            let (s, _): (Spec, Layers) = p.spec().unwrap();
+            assert_eq!(s.item, r.actor, "{}", r.item);
+            assert_eq!(s.source(), "Item_Dungeon_SmallKey", "{}", r.item);
+            assert_eq!(s.identity_override(), Some(r.actor), "{}", r.item);
+            for loc in [chest, gift] {
+                assert_eq!(resolve_at(&d, loc, r.item, None).unwrap().pack, event_pack, "{} at {loc}", r.item);
+            }
+
+            let drop_pack: String = crate::key_rings::drop_pack_any(r.actor);
+            let drop: Pick = resolve_drop(&d, r.item, None).unwrap_or_else(|e| panic!("{} drop: {e}", r.item));
+            assert_eq!(drop.content, r.drop_item, "{}", r.item);
+            assert_eq!(drop.pack, drop_pack, "{}", r.item);
+            let (ds, dl): (Spec, Layers) = drop.spec().unwrap();
+            assert_eq!(ds.item, r.drop_item, "{}", r.item);
+            assert_eq!(ds.name, r.drop_actor, "{}", r.item);
+            assert_eq!(ds.source(), "Item_Dungeon_SmallKey", "{}", r.item);
+            assert_eq!(ds.identity_override(), Some(r.actor), "{}", r.item);
+            assert_eq!(dl.ring.as_deref(), Some(r.actor), "{}", r.item);
+            assert!(dl.drop_ring, "{}", r.item);
+            for loc in [pot.as_str(), free, skull, native] {
+                assert_eq!(resolve_at(&d, loc, r.item, None).unwrap().pack, drop_pack, "{} at {loc}", r.item);
+            }
+            for at in [Spot::Free, Spot::Pot, Spot::Skull] {
+                assert!(placeable(&d, r.item, at), "{} at {at:?}", r.item);
+            }
+            let k: Spec = p.kit_spec().unwrap();
+            assert_eq!(k.name, format!("{event_pack}_GS"), "{}", r.item);
+            assert_eq!(k.item, r.actor, "{}", r.item);
+            assert_eq!(k.source(), "Item_Dungeon_SmallKey", "{}", r.item);
+            assert_eq!(k.identity_override(), Some(r.actor), "{}", r.item);
+            assert!(drop.kit_spec().is_ok(), "{}", r.item);
+            assert_eq!(drop.kit(), format!("{drop_pack}_GS"), "{}", r.item);
+        }
     }
 }
 

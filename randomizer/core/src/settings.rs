@@ -323,6 +323,48 @@ mod tests {
     }
 
     #[test]
+    fn frozen_key_ring_settings_strings_keep_decoding() {
+        const OFF: &str = "OOTRR1-A4AQECIBAMHACBQRAECCMAIBE4AQCMYBAFGACAKOAEBGSAIAQ4AQCADGNE";
+        const ON: &str = "OOTRR1-A4AQECIBAMHACBQRAECCMAIBE4AQCMYBAFGACAKOAEBGSAIAQ4AQCAGMAEAQDFZ5";
+        for (t, want) in [(OFF, false), (ON, true)] {
+            let l: Loaded = Settings::decode(t).unwrap();
+            assert!(l.warnings.is_empty(), "{t}: {:?}", l.warnings);
+            assert_eq!(l.settings.text("gerudo_fortress").unwrap(), "open");
+            assert_eq!(l.settings.text("shuffle_chests").unwrap(), "all");
+            assert_eq!(l.settings.text("shuffle_pots").unwrap(), "all");
+            assert_eq!(l.settings.text("shuffle_smallkeys").unwrap(), "keysanity");
+            assert_eq!(l.settings.text("shuffle_hideoutkeys").unwrap(), "keysanity");
+            assert_eq!(l.settings.flag("key_rings").unwrap(), want);
+            assert_eq!(l.settings.encode().unwrap(), t);
+        }
+    }
+
+    #[test]
+    fn key_ring_suboptions_round_trip_through_a_settings_string() {
+        use crate::key_rings;
+
+        let mut s: Settings = Settings::default();
+        s.set("shuffle_smallkeys", Value::s("keysanity")).unwrap();
+        s.set(key_rings::SETTING, Value::Bool(true)).unwrap();
+        s.set(key_rings::MODE_SETTING, Value::s("count")).unwrap();
+        s.set(key_rings::COUNT_SETTING, Value::Int(3)).unwrap();
+        let t: String = s.encode().unwrap();
+        let l: Loaded = Settings::decode(&t).unwrap();
+        assert!(l.warnings.is_empty(), "{:?}", l.warnings);
+        assert!(l.settings.flag(key_rings::SETTING).unwrap());
+        assert_eq!(l.settings.text(key_rings::MODE_SETTING).unwrap(), "count");
+        assert_eq!(l.settings.int(key_rings::COUNT_SETTING).unwrap(), 3);
+        assert_eq!(l.settings.items(key_rings::SELECTION_SETTING).unwrap(), key_rings::CHOICE_IDS);
+        assert_eq!(l.settings.encode().unwrap(), t);
+
+        s.set(key_rings::SETTING, Value::Bool(false)).unwrap();
+        let t: String = s.encode().unwrap();
+        let l: Loaded = Settings::decode(&t).unwrap();
+        assert_eq!(l.settings.text(key_rings::MODE_SETTING).unwrap(), "all");
+        assert_eq!(l.settings.int(key_rings::COUNT_SETTING).unwrap(), 8);
+    }
+
+    #[test]
     fn default_string_is_tiny_and_stable() {
         let t: String = Settings::default().encode().unwrap();
         assert_eq!(t, Settings::default().encode().unwrap());

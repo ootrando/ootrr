@@ -11,7 +11,7 @@ fn arg<'a>(a: &'a [String], i: usize, what: &'static str) -> Res<&'a str> {
 
 pub fn parse(a: &[String]) -> Res<(Spec, Opts, Layers)> {
     let item: &str = arg(a, 3, "missing Item_Actor")?;
-    let mut s: Spec = Spec { item: item.to_string(), name: default_name(item), style: Style::Touch, heap: None };
+    let mut s: Spec = Spec { item: item.to_string(), name: default_name(item), style: Style::Touch, heap: None, source: None, identity: None };
     let mut o: Opts = Opts { host: Host::Eden, base: None, rst_from: None, places: Vec::new(), dry: false };
     let mut l: Layers = Layers::default();
     let mut i: usize = 4;
@@ -50,6 +50,14 @@ pub fn parse(a: &[String]) -> Res<(Spec, Opts, Layers)> {
             }
             "--model-from" => {
                 l.model = Some(arg(a, i + 1, "missing model donor actor")?.to_string());
+                2
+            }
+            "--source" => {
+                s.source = Some(arg(a, i + 1, "missing template actor")?.to_string());
+                2
+            }
+            "--identity" => {
+                s.identity = Some(arg(a, i + 1, "missing pouch identity actor")?.to_string());
                 2
             }
             "--heap" => {
@@ -107,7 +115,7 @@ mod tests {
     #[test]
     fn the_defaults_are_a_touch_pickup_named_after_the_item() {
         let (s, o, l): (Spec, Opts, Layers) = parse(&args(&["r", "l", "m", "Item_Hookshot"])).unwrap();
-        assert_eq!(s, Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot".to_string(), style: Style::Touch, heap: None });
+        assert_eq!(s, Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot".to_string(), style: Style::Touch, heap: None, source: None, identity: None });
         assert_eq!(l, Layers::default());
         assert!(l.plain());
         assert_eq!(o.host, Host::Eden);
@@ -117,12 +125,14 @@ mod tests {
     #[test]
     fn every_option_is_read() {
         let a: Vec<String> = args(&[
-            "r", "l", "m", "Item_Hookshot", "--press", "--name", "Obj_Hook", "--heap", "200000", "--host", "hookshot", "--place", "11219803099333988363", "--place", "7", "--base", "x/romfs", "--rst-from", "t.zs", "--dry",
+            "r", "l", "m", "Item_Hookshot", "--press", "--name", "Obj_Hook", "--heap", "200000", "--host", "hookshot", "--place", "11219803099333988363", "--place", "7", "--base", "x/romfs", "--rst-from", "t.zs", "--source", "Item_Dungeon_SmallKey", "--identity", "Item_Ring_Forest", "--dry",
         ]);
         let (s, o, l): (Spec, Opts, Layers) = parse(&a).unwrap();
         assert!(l.plain());
         assert_eq!(s.name, "Obj_Hook");
         assert_eq!(s.style, Style::Press);
+        assert_eq!(s.source(), "Item_Dungeon_SmallKey");
+        assert_eq!(s.identity_override(), Some("Item_Ring_Forest"));
         assert_eq!(s.heap, Some(200000));
         assert_eq!(o.host, Host::Hookshot);
         assert_eq!(o.places, vec![11219803099333988363, 7]);
@@ -136,6 +146,8 @@ mod tests {
         assert!(parse(&args(&["r", "l", "m", "Item_Hookshot", "--host", "wii"])).is_err());
         assert!(parse(&args(&["r", "l", "m", "Item_Hookshot", "--what"])).is_err());
         assert!(parse(&args(&["r", "l", "m", "Item_Hookshot", "--tag"])).is_err());
+        assert!(parse(&args(&["r", "l", "m", "Item_Hookshot", "--source"])).is_err());
+        assert!(parse(&args(&["r", "l", "m", "Item_Hookshot", "--identity"])).is_err());
     }
 
     #[test]
@@ -143,10 +155,10 @@ mod tests {
         let a: Vec<String> = args(&["r", "l", "m", "Item_Bottle_Letter", "--name", "Obj_Bottle_LetterLand", "--tag", "LetterBottle", "--tag", "LetterBottle"]);
         let (s, _, l): (Spec, Opts, Layers) = parse(&a).unwrap();
         assert_eq!(s.name, "Obj_Bottle_LetterLand");
-        assert_eq!(l, Layers { tags: vec!["LetterBottle".to_string()], ammo: false, magic: false, model: None, spin: false, lift: 0, own: false, pose: None });
+        assert_eq!(l, Layers { tags: vec!["LetterBottle".to_string()], ammo: false, magic: false, model: None, pouch_from: None, ring: None, drop_ring: false, spin: false, lift: 0, own: false, pose: None });
         let (_, _, l): (Spec, Opts, Layers) = parse(&args(&["r", "l", "m", "Item_Range_Bow", "--ammo"])).unwrap();
-        assert_eq!(l, Layers { tags: Vec::new(), ammo: true, magic: false, model: None, spin: false, lift: 0, own: false, pose: None });
+        assert_eq!(l, Layers { tags: Vec::new(), ammo: true, magic: false, model: None, pouch_from: None, ring: None, drop_ring: false, spin: false, lift: 0, own: false, pose: None });
         let (_, _, l): (Spec, Opts, Layers) = parse(&args(&["r", "l", "m", "Item_FairyBless_MP", "--magic"])).unwrap();
-        assert_eq!(l, Layers { tags: Vec::new(), ammo: false, magic: true, model: None, spin: false, lift: 0, own: false, pose: None });
+        assert_eq!(l, Layers { tags: Vec::new(), ammo: false, magic: true, model: None, pouch_from: None, ring: None, drop_ring: false, spin: false, lift: 0, own: false, pose: None });
     }
 }

@@ -61,6 +61,7 @@ pub struct Late {
 pub const ZORA_DONE: &str = "SageOfWater_KingZora_adult_Talk_Event198";
 pub const CARD_DONE: &str = "HavePlayedEvent.Dm_Gerudo_0025";
 pub const CARD_SCENE: &str = "Dm_Gerudo_0025";
+pub const CARD_ONCE_PREFIX: &str = "OOTRRCardOnce";
 
 pub const LATE: [Late; 2] = [
     // After the Water Temple, King Zora stands free in the thawed domain and talks through his own
@@ -239,6 +240,55 @@ pub fn mark_clear(b: &mut Bf) -> Res<()> {
     Ok(())
 }
 
+fn card_transition(f: &Flow, i: usize) -> bool {
+    let Kind::Action { actor, act, params, .. } = &f.events[i].kind else {
+        return false;
+    };
+    let Some(a) = f.actors.get(usize::from(*actor)) else {
+        return false;
+    };
+    if a.name != MOVER || a.actions.get(usize::from(*act)).map(|s| s.as_str()) != Some(MOVE) {
+        return false;
+    }
+    matches!(params.as_ref().and_then(|p| p.get("EventName")), Some(Val::Str(s)) if s == CARD_SCENE)
+}
+
+
+
+
+pub fn card_once(b: &mut Bf) -> Res<usize> {
+    let f: &mut Flow = guard::flow_mut(b, CLEAR.0)?;
+    if f.events.iter().any(|e| e.name.starts_with(CARD_ONCE_PREFIX)) {
+        return Err(Error::Msg(format!("quest order: {} already guards the card scene", CLEAR.0)));
+    }
+    let targets: Vec<usize> = (0..f.events.len()).filter(|&i| card_transition(f, i)).collect();
+    if targets.is_empty() {
+        return Err(Error::Msg(format!("quest order: {} has no transition to {CARD_SCENE}", CLEAR.0)));
+    }
+    let (qa, qi): (u16, u16) = query_slot(f, DATA, BOOL_QUERY)?;
+    let mut out: Vec<String> = Vec::new();
+    for (n, t) in targets.iter().enumerate() {
+        let old: u16 = guard::idx(*t)?;
+        let next: u16 = match &f.events[*t].kind {
+            Kind::Action { next, .. } => *next,
+            _ => unreachable!(),
+        };
+        let to: u16 = guard::idx(f.events.len())?;
+        guard::retarget(f, old, to);
+        let cases: Vec<Case> = [(0, next), (1, old)].into_iter().filter(|(_, ev)| *ev != NONE).map(|(val, ev)| Case { val, ev }).collect();
+        let name: String = format!("{CARD_ONCE_PREFIX}{n}");
+        let params: Cont = Cont {
+            items: vec![
+                ("Index".to_string(), Val::Int(-1)),
+                ("GameDataName".to_string(), Val::Str(CARD_DONE.to_string())),
+            ],
+        };
+        f.events.push(Event { name: name.clone(), kind: Kind::Switch { actor: qa, query: qi, cases, params: Some(params) } });
+        out.push(f.events[*t].name.clone());
+    }
+    Ok(out.len())
+}
+
 /// Every flow this module edits, each with its edit.
 pub fn edits() -> Vec<(&'static str, Box<dyn Fn(&mut Bf) -> Res<()>>)> {
     let mut flows: Vec<&'static str> = Vec::new();
@@ -259,6 +309,9 @@ pub fn edits() -> Vec<(&'static str, Box<dyn Fn(&mut Bf) -> Res<()>>)> {
         .into_iter()
         .map(|flow| {
             let edit: Box<dyn Fn(&mut Bf) -> Res<()>> = Box::new(move |b: &mut Bf| {
+                if flow == CLEAR.0 {
+                    card_once(b)?;
+                }
                 for l in LATE.iter().filter(|l| l.flow == flow) {
                     hook(b, l)?;
                 }
@@ -396,6 +449,58 @@ mod tests {
         assert_eq!(f.actors[*actor as usize].actions[*act as usize], MOVE);
         assert_eq!(params.as_ref().and_then(|p| p.get("EventName")), Some(&Val::Str("Dm_X".to_string())));
         assert!(entry(f, "Near").subs.is_empty());
+        let back: Bf = Bf::parse(&b.write().unwrap()).unwrap();
+        assert_eq!(back, b);
+    }
+
+    fn card_sample() -> Bf {
+        let actor = |n: &str, acts: &[&str], qs: &[&str]| crate::bfevfl::Actor {
+            name: n.to_string(),
+            sub: String::new(),
+            arg: String::new(),
+            actions: acts.iter().map(|s| s.to_string()).collect(),
+            queries: qs.iter().map(|s| s.to_string()).collect(),
+            params: None,
+            ep: 0xFFFF,
+            cut: 1,
+        };
+        let f: Flow = Flow {
+            name: CLEAR.0.to_string(),
+            actors: vec![actor(MOVER, &[MOVE], &[]), actor(DATA, &[], &[BOOL_QUERY])],
+            events: vec![
+                Event { name: "Start".to_string(), kind: Kind::Action { next: 1, actor: 0, act: 0, params: None } },
+                Event {
+                    name: "Event145".to_string(),
+                    kind: Kind::Action {
+                        next: 2,
+                        actor: 0,
+                        act: 0,
+                        params: Some(Cont { items: vec![("EventName".to_string(), Val::Str(CARD_SCENE.to_string()))] }),
+                    },
+                },
+                Event { name: "After".to_string(), kind: Kind::Action { next: NONE, actor: 0, act: 0, params: None } },
+            ],
+            entries: vec![
+                Entry { name: "Meet_FourCarpenter_ClearEvent".to_string(), subs: Vec::new(), vars: Vec::new(), main: 0, pad: 0 },
+            ],
+        };
+        Bf { ver: [0, 4, 0, 0], bom: 0xFEFF, shift: 3, pad: 0, name: CLEAR.0.to_string(), flows: vec![f], tls: Vec::new() }
+    }
+
+    #[test]
+    fn the_card_scene_guard_skips_later_unlocks_but_keeps_the_first_grant() {
+        let mut b: Bf = card_sample();
+        assert_eq!(card_once(&mut b).unwrap(), 1);
+        let f: &Flow = &b.flows[0];
+        let Kind::Action { next, .. } = &f.events[0].kind else { panic!() };
+        assert_eq!(*next, 3);
+        assert_eq!(cases(f, 3), vec![(0, 2), (1, 1)]);
+        assert_eq!(name_of(f, 3), CARD_DONE);
+        let Kind::Switch { actor, query, params, .. } = &f.events[3].kind else { panic!() };
+        assert_eq!(f.actors[*actor as usize].name, DATA);
+        assert_eq!(f.actors[*actor as usize].queries[*query as usize], BOOL_QUERY);
+        assert_eq!(params.as_ref().and_then(|p| p.get("Index")), Some(&Val::Int(-1)));
+        assert!(card_once(&mut b).is_err());
         let back: Bf = Bf::parse(&b.write().unwrap()).unwrap();
         assert_eq!(back, b);
     }

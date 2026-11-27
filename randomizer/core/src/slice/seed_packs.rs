@@ -237,6 +237,11 @@ pub fn build_hooked(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: 
         }
     }
     let lines: Vec<String> = audit(&mut rf, &base, &wants)?;
+    let names: Vec<String> = wants.keys().cloned().collect();
+    let bags: Vec<String> = crate::bombchu_bag::pickup::repoint(&mut rf, &base, &names)?;
+    if !bags.is_empty() {
+        let _ = writeln!(b.report, "Bombchu Bag pickups hand out the bag with its own model: {}", bags.join(", "));
+    }
     b.counts.files += wants.len();
     let _ = writeln!(b.report, "{} pickup packs for key items at pickup spots were added to this mod with their actor rows and size table entries, all audited. None of them is tested in the game yet:", wants.len());
     for l in lines {

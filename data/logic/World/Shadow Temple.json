@@ -7,10 +7,10 @@
         "dungeon": "Shadow Temple",
         "exits": {
             "Graveyard Warp Pad Region": "True",
-            # Din's Fire lights the torches of the first hall, the Lens shows its real door.
+            # Din's Fire (or Fire Arrows) lights the torches of the first hall.
             "Shadow Temple Beginning": "
-                (logic_lens_shadow or can_use(Lens_of_Truth)) and can_use(Dins_Fire) and
-                (can_use(Hookshot) or can_use(Longshot))",
+                (can_use(Dins_Fire) or (is_adult and can_use(Fire_Arrows))) and
+                (can_use(Hookshot) or can_use(Longshot) or can_use(Hover_Boots))",
             "Farores Wind Warp": "can_use(Farores_Wind)"
         }
     },

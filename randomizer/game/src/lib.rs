@@ -9,6 +9,7 @@ pub mod entrance_swap;
 pub mod entrances;
 pub mod error;
 pub mod flags;
+pub mod fres;
 pub mod flags_build;
 pub mod flags_gen;
 pub mod flags_harvest;

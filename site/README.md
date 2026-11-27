@@ -37,4 +37,4 @@ These need Node 24 or newer.
 
 ## Deploy
 
-`.github/workflows/pages.yml` builds, tests, audits and checks parity on pull requests that touch the code. On a push to `main` it also publishes `site/dist` to GitHub Pages. Set Settings, Pages, Source to GitHub Actions once.
+`.github/workflows/pages.yml` builds, tests, audits and checks parity on pull requests that touch the code. On a push to `nightly` it also publishes `site/dist` to GitHub Pages (https://ootrando.github.io/ootrr/), stamped with a nightly version. Set Settings, Pages, Source to GitHub Actions once.

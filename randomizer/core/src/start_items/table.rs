@@ -125,7 +125,7 @@ pub const GROUPS: &[Group] = &[
     Group { id: "stone_of_agony", logic: "Stone of Agony", offset: 0, strip: Strip::Unique, recipe: Recipe::Grant(&["Item_AgonyStone"]) },
     Group { id: "gerudo_card", logic: "Gerudo Membership Card", offset: 0, strip: Strip::Unique, recipe: Recipe::Grant(&["Item_Token_Gerudo"]) },
     Group { id: "magic_beans", logic: "Magic Bean", offset: 0, strip: Strip::Keep, recipe: Recipe::Count("Item_MagicBean", 10) },
-    Group { id: "bombchus", logic: "Bombchus", offset: 0, strip: Strip::Keep, recipe: Recipe::Count("Item_Bombchu", 20) },
+    Group { id: "bombchus", logic: crate::bombchu_bag::ITEM, offset: 0, strip: Strip::Unique, recipe: Recipe::Count(crate::bombchu_bag::CHU, crate::bombchu_bag::CAPACITY) },
 ];
 
 pub const OPTS: &[Opt] = &[

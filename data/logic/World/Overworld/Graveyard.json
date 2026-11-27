@@ -39,7 +39,7 @@
         "region_name": "Graveyard Heart Piece Grave",
         "scene": "Graveyard Heart Piece Grave",
         "locations": {
-            "Graveyard Heart Piece Grave Chest": "can_play(Suns_Song)"
+            "Graveyard Heart Piece Grave Chest": "True"
         },
         "exits": {
             "Graveyard": "True"

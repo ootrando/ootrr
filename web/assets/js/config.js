@@ -66,7 +66,9 @@ export const FIELDS = [
   { id: "seed", page: CONFIG, section: "Seed", label: "Seed",
     tip: "Type a seed to make the same game again. Left empty, Generate picks a random seed. This box is never filled in for you. The seed that was used is in the spoiler log and on the Seed page." },
   { id: "spoiler_log", page: CONFIG, section: "Seed", label: "Include Spoiler Log",
-    tip: "Writes Spoiler.txt into the mod folder next to the mod. It lists the seed, the settings string, every setting used, the expected playthrough step by step, and the item at every location. Seed.ootrr goes beside it, the seed file the Import menu reads. Off, neither is made and an old Spoiler.txt and Seed.ootrr are removed." },
+    tip: "Writes Spoiler.txt into the mod folder next to the mod. It lists the seed, the settings string, every setting used, the expected playthrough step by step, and the item at every location. Seed.ootrr goes beside it, the seed file the Import menu reads. Off, neither is made and an old Spoiler.txt and Seed.ootrr are removed. A race seed never has a spoiler log, whatever this says." },
+  { id: "race_seed", page: CONFIG, section: "Seed", label: "Generate a race seed",
+    tip: "Makes a seed nobody can see the items of, you included. No spoiler log is made, the app shows no placements, and the seed file is a race file: only the seed text, the settings string and the seed's hash, which anyone can open here and build into the same seed. It is written beside the mod as Seed.ootrr, so share that file. A race seed rolls differently from the same seed text without race mode, so it cannot be made again with a spoiler log. The title screen shows a row of five item icons under the logo, picked from the seed's hash: everyone in the race should see the same five. Everyone needs the same version of the app to build it. Plandomizer entries cannot be used." },
   { id: "music", page: COSMETICS, section: "Music and sound", label: "Music shuffle", choices: SHUFFLE("music"),
     tip: "Music changes only the mod you build, never the seed, so the same seed can be built with different music. Cutscene music keeps its own tracks. Themes built from stacked layers trade whole layer sets. Area themes that change with the time of day play one track all day. Jingles only trade with other jingles." },
   { id: "sfx", page: COSMETICS, section: "Music and sound", label: "Sound effect shuffle", choices: SHUFFLE("sounds"), tip: "Shuffles sound effects in the mod you build. The seed is not changed." },
@@ -87,7 +89,7 @@ function set_status(el, kind, title) {
 
 function row(f, terms, control, extra, badge) {
   const tip = tip_button(f.label, () => f.tip);
-  const check = f.id === "spoiler_log" || f.id === "delete_others";
+  const check = f.id === "spoiler_log" || f.id === "race_seed" || f.id === "delete_others";
   const head = check
     ? h("div", { class: "wl" }, h("label", { class: "chk", for: `f_${f.id}` }, control, h("span", null, marked(f.label, terms))), tip)
     : h("div", { class: "wl" }, h("label", { for: `f_${f.id}` }, marked(f.label, terms)), tip, badge || null);
@@ -304,6 +306,14 @@ export function field_el(f, terms = []) {
     });
     return row(f, terms, box);
   }
+  if (f.id === "race_seed") {
+    const box = h("input", { type: "checkbox", id: "f_race_seed", checked: !!state.race_seed });
+    box.addEventListener("change", () => {
+      state.race_seed = box.checked;
+      touch();
+    });
+    return row(f, terms, box);
+  }
   if (f.id === "title_logo") {
     const box = h("input", { type: "checkbox", id: "f_title_logo", checked: cos.title !== false });
     box.addEventListener("change", () => {
@@ -334,7 +344,7 @@ export function gen_line() {
     line.classList.toggle("ready", !miss);
     line.textContent = miss
       ? `Fill in ${miss}, then use Generate at the top right.`
-      : `Generate, at the top right, writes the mod to ${mod_target()}${state.spoiler_log ? ", with Spoiler.txt and Seed.ootrr beside it" : ""}.`;
+      : `Generate, at the top right, writes the mod to ${mod_target()}${state.race_seed ? ", a race seed with no spoiler log, with the race file Seed.ootrr beside it" : state.spoiler_log ? ", with Spoiler.txt and Seed.ootrr beside it" : ""}.`;
   };
   draw();
   return { el: line, draw };

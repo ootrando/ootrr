@@ -67,9 +67,9 @@ jobs:
 
   # The built site is committed to the gh-pages branch, and GitHub Pages serves
   # that branch (Settings > Pages > Deploy from a branch > gh-pages, / (root)).
-  # main is the site's root and nightly its nightly/ folder; a deploy replaces
-  # its own part and keeps the other. Each deploy replaces the branch with one
-  # commit, so old wasm builds do not pile up in the history.
+  # The nightly branch is the site (ootrando.github.io/ootrr/); nightly/ only
+  # sends the old /ootrr/nightly/ link there. Each deploy replaces the branch
+  # with one commit, so old wasm builds do not pile up in the history.
   deploy:
     if: github.event_name != 'pull_request'
     needs: build
@@ -88,24 +88,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          mkdir pub
-          cd pub
+          cd site
+          touch .nojekyll
+          mkdir -p nightly
+          {
+            echo '<!doctype html>'
+            echo '<meta charset="utf-8">'
+            echo '<title>OOTRR Web</title>'
+            echo '<meta http-equiv="refresh" content="0; url=../">'
+            echo '<link rel="canonical" href="../">'
+            echo '<p>The web builder moved to <a href="../">ootrando.github.io/ootrr</a>.</p>'
+          } > nightly/index.html
           git init -q -b gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git fetch -q --depth 1 "$url" gh-pages; then
-            git read-tree FETCH_HEAD
-            git checkout-index -a -f
-          fi
-          if [ "$GITHUB_REF_NAME" = nightly ]; then
-            rm -rf nightly
-            cp -r ../site nightly
-          else
-            find . -mindepth 1 -maxdepth 1 ! -name .git ! -name nightly -exec rm -rf {} +
-            cp -r ../site/. .
-          fi
-          touch .nojekyll
           git add -A
           git commit -q -m "Site from ${GITHUB_REF_NAME} ${GITHUB_SHA}"
-          git push -f "$url" gh-pages
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages

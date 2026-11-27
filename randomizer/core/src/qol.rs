@@ -5,6 +5,7 @@ pub mod dampe_dig;
 pub mod dampe_race;
 pub mod fishing;
 pub mod gear_cycle;
+pub mod hook_probe;
 pub mod low_health;
 pub mod night_skulls;
 pub mod scarecrow;
@@ -475,8 +476,9 @@ mod tests {
         assert!(n1.len() < n0.len(), "{n0} {n1}");
         let (_, p0): (Vec<ItemId>, String) = rule(&w0, "Market 5 Big Poes");
         let (_, p1): (Vec<ItemId>, String) = rule(&w1, "Market 5 Big Poes");
-        assert!(p0.contains("Has(107, 5)"), "{p0}");
-        assert!(p1.contains("Any(") && !p1.contains("Has(107, 5)"), "{p1}");
+        let poes: String = format!("Has({}, 5)", w0.item("Bottle with Big Poe").unwrap());
+        assert!(p0.contains(&poes), "{p0}");
+        assert!(p1.contains("Any(") && !p1.contains(&poes), "{p1}");
         let (q, _): (Vec<ItemId>, String) = rule(&world_with(&d, &[]).unwrap(), "Kak Anju as Child");
         assert!(q.is_empty());
     }

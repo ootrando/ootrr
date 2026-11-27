@@ -67,6 +67,7 @@ fn extra_rupees(f: &mut Flow, then: u16) -> Res<u16> {
 const BOMB_BAGS: &[&str] = &["Item_BombBag_Small", "Item_BombBag_Medium", "Item_BombBag_Large"];
 const QUIVERS: &[&str] = &["Item_Quiver_Small", "Item_Quiver_Medium", "Item_Quiver_Large"];
 const BULLET_BAGS: &[&str] = &["Item_BulletBag_Small", "Item_BulletBag_Medium", "Item_BulletBag_Large"];
+const CHU_BAG: &[&str] = &[crate::bombchu_bag::CHU];
 /// Ammo the pouch can only hold with a bag, and those bags. Handed out without one, the give adds
 /// the ammo anyway and the game sets up its slot (a usable bomb bag for bombs), so every give of
 /// these checks for a bag first and hands out a green rupee without one.
@@ -78,6 +79,9 @@ const AMMO: &[(&str, &[&str])] = &[
     ("Item_Arrow_Normal", QUIVERS),
     ("TBox_DekuSeedBundle", BULLET_BAGS),
     ("Item_DekuSeed", BULLET_BAGS),
+    ("Item_BombchuBundle_Small", CHU_BAG),
+    ("Item_BombchuBundle_Medium", CHU_BAG),
+    ("Item_BombchuBundle_Large", CHU_BAG),
 ];
 
 /// The bags that let the pouch hold `actor`, if it is ammo that needs one.
@@ -1159,7 +1163,7 @@ mod tests {
         guard(&mut f, "Item_BombBundle_Small").unwrap();
         assert_eq!(f.entries.len(), 3);
         assert!(guarded("Item_Bomb") && guarded("Item_BombBundle_Small"));
-        assert!(!guarded("Item_BombchuBundle_Small") && !guarded("Item_BombBag_Small"));
+        assert!(guarded("Item_BombchuBundle_Small") && !guarded(crate::bombchu_bag::ACTOR) && !guarded("Item_BombBag_Small"));
         assert_eq!(guard_of(&guard_family("Item_Bomb")), Some("Item_Bomb"));
         assert_eq!(guard_of("Hookshot"), None);
     }

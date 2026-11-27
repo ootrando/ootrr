@@ -17,8 +17,7 @@
         "dungeon": "Bottom of the Well",
         "locations": {
             "Bottom of the Well Front Center Bombable Chest": "has_explosives",
-            "Bottom of the Well Freestanding Key": "Sticks or can_use(Dins_Fire)",
-            # In the basement behind rocks that a bomb clears.
+            "Bottom of the Well Freestanding Key": "((Progressive_Scale, 2) or can_play(Zeldas_Lullaby)) and (Sticks or can_use(Dins_Fire))",
             "Bottom of the Well Map Chest": "
                 has_explosives or
                 (Progressive_Strength_Upgrade and

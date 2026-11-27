@@ -278,11 +278,12 @@ mod tests {
             .into_keys()
             .filter(|n| !kits.contains(n.as_str()) && !scene.contains(n) && rows::find(&base, n).is_none())
             .collect();
-        let want: BS<String> = kits.iter().map(|a| a.to_string()).chain(scene.iter().cloned()).chain(placed.iter().cloned()).collect();
+        let bag: String = crate::bombchu_bag::ACTOR.to_string();
+        let want: BS<String> = kits.iter().map(|a| a.to_string()).chain(scene.iter().cloned()).chain(placed.iter().cloned()).chain(std::iter::once(bag)).collect();
         let shipped: std::collections::HashMap<&str, &Node> = rows::index(&base);
         let added: BS<String> = ys[0].root.as_arr().unwrap().iter().filter_map(rows::id).filter(|n| !shipped.contains_key(n)).map(|n| n.to_string()).collect();
         assert_eq!(added, want);
-        assert_eq!(ys[0].root.as_arr().unwrap().len(), 8363 + kits.len() + scene.len() + placed.len());
+        assert_eq!(ys[0].root.as_arr().unwrap().len(), 8363 + kits.len() + scene.len() + placed.len() + 1);
         for a in &kits {
             let raw: Vec<u8> = rf.zs.decompress(&fs::read(romfs.join(pack_of(a))).unwrap()).unwrap();
             assert_eq!(verify(&sarc::parse(&raw).unwrap(), a, &token).unwrap().len(), 3, "{a}");

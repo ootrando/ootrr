@@ -7,6 +7,7 @@
     "Longshot": "(Progressive_Hookshot, 2)",
     "Silver_Gauntlets": "(Progressive_Strength_Upgrade, 2)",
     "Golden_Gauntlets": "(Progressive_Strength_Upgrade, 3)",
+    "Golden_Scale": "(Progressive_Scale, 2)",
     "Scarecrow": "Progressive_Hookshot and can_call_scarecrow",
     "Distant_Scarecrow": "(Progressive_Hookshot, 2) and can_call_scarecrow",
     "can_call_scarecrow": "can_play(Scarecrow_Song) or (scarecrow_behavior == 'free' and (Ocarina or can_oi))",
@@ -36,8 +37,8 @@
     # "Big_Poe": "'Big Poe'",
 
     "can_refill_bombchus": "Buy_Bombchu_5 or Buy_Bombchu_10 or Buy_Bombchu_20 or Bombchu_Drop",
-    "has_bombchus": "(free_bombchu_drops and found_bombchus) or (not free_bombchu_drops and can_refill_bombchus and Bomb_Bag)",
-    "found_bombchus": "(free_bombchu_drops and (Bombchus or Bombchus_5 or Bombchus_10 or Bombchus_20)) or (not free_bombchu_drops and Bomb_Bag)",
+    "has_bombchus": "found_bombchus and (free_bombchu_drops or can_refill_bombchus)",
+    "found_bombchus": "Bombchu_Bag",
     "has_explosives": "Bombs or (free_bombchu_drops and has_bombchus)",
     "has_both_explosives": "Bombs and (free_bombchu_drops and has_bombchus)",
     "is_child": "age == 'child'",

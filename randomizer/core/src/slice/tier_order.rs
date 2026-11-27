@@ -270,6 +270,24 @@ pub fn chest_views(d: &Data, seed: &SeedFile) -> Res<BM<String, String>> {
 }
 
 pub fn fixed_actors(d: &Data, seed: &SeedFile) -> Res<Verdict> {
+    // An Ice Trap gives nothing, so the spot counts as junk here (as it did when the seed was
+    // generated), not as the item it looks like: a look that opened a route would let the player
+    // reach a fixed spot sooner than the logic allows, and the build would refuse a good seed.
+    let plain: SeedFile;
+    let seed: &SeedFile = if seed.cold.is_empty() {
+        seed
+    } else {
+        let mut s: SeedFile = seed.clone();
+        for loc in &seed.cold {
+            s.placements.insert(loc.clone(), crate::frost::fake::RUPEE_ITEM.to_string());
+            // A shop deal's entry names the same item as its placement (shops::seed::layout).
+            if let Some(e) = s.shops.get_mut(loc).filter(|e| e.deal) {
+                e.item = crate::frost::fake::RUPEE_ITEM.to_string();
+            }
+        }
+        plain = s;
+        &plain
+    };
     if !slots(d, &seed.placements).iter().any(|s| s.give == Give::Open) {
         return Ok(Verdict::default());
     }
@@ -511,4 +529,20 @@ mod tests {
         assert_eq!(seeds, 50);
         assert!(open > 0, "no seed had a fixed upgrade slot, the test proves nothing");
     }
+    #[test]
+    fn ice_trap_looks_do_not_count_as_items_in_the_build_check() {
+        // Races preset seed "p7" (2026-11-27): the fill kept every tier in order, but the build
+        // read its Ice Traps as the items they look like (Hover Boots, Din's Fire, ...), reached
+        // Sheik in Forest too soon and refused the seed. The traps count as junk now.
+        let d: Data = Data::load().unwrap();
+        let races = crate::settings::presets::builtin().unwrap().into_iter().find(|p| p.id == "races").unwrap();
+        let s: Settings = races.apply(&Settings::default()).unwrap();
+        let g: Generated = generate_data(&d, &s, "p7", &GenOpts { extras: true, ..GenOpts::default() }).unwrap();
+        let (prep, traps) = crate::frost::prepare(&g.seed_file).unwrap();
+        assert!(!traps.is_empty() && prep.cold.len() == traps.len());
+        assert!(fixed_actors(&d, &g.seed_file).unwrap().bad.is_empty());
+        let v: Verdict = fixed_actors(&d, &prep).unwrap();
+        assert!(v.bad.is_empty(), "{:?}", v.bad);
+    }
 }
+

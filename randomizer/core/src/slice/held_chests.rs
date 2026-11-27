@@ -52,6 +52,10 @@ mod tests {
             let st: Option<State> = d.state_of(n);
             assert!(st == Some(State::Eligible) || (st == Some(State::Event) && d.event_ok(n)), "{n} is {st:?}");
             let v: &str = d.vanilla_of(n).unwrap();
+            if n == crate::bombchu_bag::pool::HOME {
+                assert_eq!(v, crate::bombchu_bag::ITEM);
+                continue;
+            }
             assert!(d.item(v).is_some_and(|i| i.actor.as_deref() == d.cat.by_name(n).map(|c| c.item.as_str())), "{n} holds {v}");
         }
     }

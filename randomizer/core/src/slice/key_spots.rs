@@ -158,6 +158,9 @@ pub fn contents(d: &Data, item: &str) -> Vec<String> {
     if NEVER.contains(&item) || !kind || i.dungeon.is_some() {
         return Vec::new();
     }
+    if item == crate::bombchu_bag::ITEM {
+        return vec![crate::bombchu_bag::BUNDLE.to_string()];
+    }
     match family(i) {
         Some(f) if TOP_ONLY.contains(&f) => i.tiers.last().cloned().into_iter().collect(),
         Some(_) => i.tiers.clone(),
@@ -204,6 +207,9 @@ pub fn resolve(d: &Data, item: &str, tier: Option<&str>) -> Res<Pick> {
     if let Some(p) = crate::dungeon_packs::of_item(i) {
         return Ok(p.pick());
     }
+    if item == crate::bombchu_bag::ITEM {
+        return Ok(crate::bombchu_bag::pick());
+    }
     let content: String = match (tier, family(i)) {
         (Some(t), _) => t.to_string(),
         (None, Some(f)) if TOP_ONLY.contains(&f) => i.tiers.last().cloned().unwrap_or_default(),
@@ -224,6 +230,10 @@ pub fn resolve_kit(d: &Data, item: &str, tier: Option<&str>) -> Res<Pick> {
         return Ok(p);
     }
     let p: Pick = resolve(d, item, tier)?;
+    if item == crate::bombchu_bag::ITEM {
+        p.kit_spec()?;
+        return Ok(p);
+    }
     kit_pick(&p.content).ok_or_else(|| E::Msg(format!("{item} has no pickup pack a kit can carry ({})", p.content)))
 }
 

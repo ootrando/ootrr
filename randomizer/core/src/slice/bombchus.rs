@@ -120,7 +120,7 @@ mod tests {
         let d: Data = Data::load().unwrap();
         let off: World = world(&d).unwrap();
         let on: World = chu_world(&d);
-        let chus: [&str; 4] = ["Bombchus", "Bombchus (5)", "Bombchus (10)", "Bombchus (20)"];
+        let chus: [&str; 5] = [crate::bombchu_bag::ITEM, "Bombchus", "Bombchus (5)", "Bombchus (10)", "Bombchus (20)"];
         let mut gone: Vec<&str> = chus.to_vec();
         gone.push("Bomb Bag");
         for (w, ticked) in [(&off, false), (&on, true)] {
@@ -129,7 +129,7 @@ mod tests {
             assert!(!open(&none, w, Age::Child), "{ticked} no explosive");
             for c in chus {
                 let have: Search = explore(w, &p, &[w.item(c).unwrap()]);
-                assert_eq!(open(&have, w, Age::Child), ticked, "{ticked} {c}");
+                assert_eq!(open(&have, w, Age::Child), ticked && c == crate::bombchu_bag::ITEM, "{ticked} {c}");
             }
             let bag: Search = explore(w, &without(w, &d, &chus), &[]);
             assert!(open(&bag, w, Age::Child), "{ticked} bag");
@@ -137,15 +137,15 @@ mod tests {
     }
 
     #[test]
-    fn a_bomb_bag_only_matters_for_bombchus_when_not_ticked() {
+    fn the_bombchu_bag_counts_as_an_explosive_only_when_ticked() {
         let d: Data = Data::load().unwrap();
         let off: World = world(&d).unwrap();
         let on: World = chu_world(&d);
         let p_off: Placement = without(&off, &d, &["Bomb Bag"]);
         let p_on: Placement = without(&on, &d, &["Bomb Bag"]);
-        let chu: ItemId = off.item("Bombchus (20)").unwrap();
+        let chu: ItemId = off.item(crate::bombchu_bag::ITEM).unwrap();
         let s_off: Search = explore(&off, &p_off, &[chu]);
-        let s_on: Search = explore(&on, &p_on, &[on.item("Bombchus (20)").unwrap()]);
+        let s_on: Search = explore(&on, &p_on, &[on.item(crate::bombchu_bag::ITEM).unwrap()]);
         let l_off: usize = off.real.iter().filter(|l| s_off.loc_access(**l)).count();
         let l_on: usize = on.real.iter().filter(|l| s_on.loc_access(**l)).count();
         assert!(l_on > l_off, "{l_on} vs {l_off}");

@@ -175,9 +175,6 @@ pub fn read(s: &Settings, bad: &mut Vec<String>) -> Kit {
         recipe(&mut k, g, *tier);
         k.take.push(Take { logic: g.logic, count: take_count(g, *tier), strip: g.strip });
     }
-    if tiers.contains_key("bombchus") && !tiers.contains_key("bombs") {
-        bad.push("starting_items includes bombchus without a bomb bag. The remake only lets you use Bombchus once a Bomb Bag and its ammo maximum are set, so tick a bomb bag as well".to_string());
-    }
     let songs: Vec<String> = s.items(SONGS).map(|v| v.to_vec()).unwrap_or_default();
     for id in &songs {
         match song(id) {
@@ -270,13 +267,13 @@ mod tests {
     fn refused_and_inconsistent_choices_are_named() {
         let mut bad: Vec<String> = Vec::new();
         read(&with(&["zeldas_letter", "bombchus"], &[], 3), &mut bad);
-        assert_eq!(bad.len(), 2, "{bad:?}");
+        assert_eq!(bad.len(), 1, "{bad:?}");
         assert!(bad[0].contains("zeldas_letter") && bad[0].contains("trade slot"));
-        assert!(bad[1].contains("bombchus without a bomb bag"));
         let mut ok: Vec<String> = Vec::new();
-        let k: Kit = read(&with(&["bombchus", "bomb_bag"], &[], 3), &mut ok);
+        let k: Kit = read(&with(&["bombchus"], &[], 3), &mut ok);
         assert!(ok.is_empty());
-        assert!(k.logic().contains(&("Bombchus", 1)));
+        assert!(k.logic().contains(&(crate::bombchu_bag::ITEM, 1)));
+        assert!(k.sets.contains(&Set::Int(format!("PouchData.{}.StockNum", crate::bombchu_bag::CHU), crate::bombchu_bag::CAPACITY)));
     }
 
     #[test]

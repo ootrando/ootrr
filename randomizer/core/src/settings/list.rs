@@ -115,14 +115,14 @@ fn ganon_key() -> Vec<Setting> {
 
 fn starting_items() -> Setting {
     Setting::multi(36, "starting_items", "starting", "Starting items")
-        .tip("Items you begin the game with. One copy of each is taken out of the item pool and replaced by Rupee (1). Upgrades are ticked by tier and the highest ticked tier counts: Longshot means two progressive Hookshots, Big Quiver means the Bow and one quiver upgrade, Big Bullet Bag means the Slingshot and one bullet bag upgrade, Giant's Wallet means two wallet upgrades, Double Magic means two magic upgrades, Ocarina of Time means both ocarinas, Golden Gauntlets means all three strength upgrades. Bags start full. Bombchus need a bomb bag. Zelda's Letter cannot be given.")
+        .tip("Items you begin the game with. One copy of each is taken out of the item pool and replaced by Rupee (1). Upgrades are ticked by tier and the highest ticked tier counts: Longshot means two progressive Hookshots, Big Quiver means the Bow and one quiver upgrade, Big Bullet Bag means the Slingshot and one bullet bag upgrade, Giant's Wallet means two wallet upgrades, Double Magic means two magic upgrades, Ocarina of Time means both ocarinas, Golden Gauntlets means all three strength upgrades. Bags start full. The Bombchu Bag comes with 40 Bombchus and needs no bomb bag. Zelda's Letter cannot be given.")
         .opts(&[
             ("ocarina", "Ocarina"),
             ("slingshot", "Slingshot"),
             ("boomerang", "Boomerang"),
             ("bow", "Bow"),
             ("bomb_bag", "Bomb Bag"),
-            ("bombchus", "Bombchus"),
+            ("bombchus", "Bombchu Bag"),
             ("hookshot", "Hookshot"),
             ("longshot", "Longshot"),
             ("megaton_hammer", "Megaton Hammer"),
@@ -717,7 +717,7 @@ pub fn build() -> Schema {
     );
     s.push(
         Setting::toggle(57, "bombchus_in_logic", "world", "Bombchus in logic (experimental)", false)
-            .tip("Experimental. Bombchus count as explosives in the seed logic, so walls, switches and enemies that need an explosive can be handled with Bombchus and no Bomb Bag. This follows the OoTR option that considers Bombchus in logic. Only the logic side is done here, the remake gets no separate Bombchu bag and no Bombchu drops. Caution: in our test of the remake, Bombchus only worked once a Bomb Bag and its ammo maximum were set, and a Bombchu pickup gave a count of 0 without them. The game is also reported to gate Bombchu use on a bag or a defeated Dodongo. A seed with this ticked may expect Bombchus where the game will not let you use them."),
+            .tip("Experimental. Bombchus count as explosives in the seed logic, so walls, switches and enemies that need an explosive can be handled with Bombchus and no Bomb Bag. This follows the OoTR option that considers Bombchus in logic, with the Bombchu Bag as the item that counts. The remake gets no Bombchu drops. Caution: before the Bombchu Bag, a test of the remake found Bombchus only worked once a Bomb Bag and its ammo maximum were set, and a Bombchu pickup gave a count of 0 without them. The game is also reported to gate Bombchu use on a bag or a defeated Dodongo. A seed with this ticked may expect Bombchus where the game will not let you use them."),
     );
     s.push(
         Setting::choice(70, crate::qol::SKIP, "world", "Skippable cutscenes", "off")

@@ -422,6 +422,7 @@ pub fn prepare(seed: &SeedFile) -> Res<(SeedFile, Vec<Trap>)> {
             Place::Chest => {}
         }
         out.placements.insert(loc.clone(), stand);
+        out.cold.insert(loc.clone());
         traps.push(Trap { loc, place, look: look.clone(), item: look, fake, actor, kit });
     }
     Ok((out, traps))

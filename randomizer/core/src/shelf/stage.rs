@@ -474,7 +474,7 @@ mod tests {
         let t = crate::shops::table().unwrap();
         let mut rf: Romfs = Romfs::open(&root).unwrap();
         let mut want: Vec<(String, Option<String>)> = Vec::new();
-        for i in d.items.iter().filter(|i| crate::shops::rules::class(&d, &i.name).is_some()) {
+        for i in d.items.iter().filter(|i| crate::shops::rules::class(&d, &i.name).is_some() && i.name != crate::bombchu_bag::ITEM) {
             match crate::shops::rules::class(&d, &i.name).unwrap() {
                 crate::shops::rules::Class::Upgrade => want.extend(i.tiers.iter().map(|a| (a.clone(), crate::shops::jobs::donor(t, a)))),
                 crate::shops::rules::Class::Song => want.push((i.actor.clone().unwrap(), t.song_models.first().cloned())),

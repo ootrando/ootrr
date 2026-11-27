@@ -30,7 +30,10 @@ fn inside(inner: &PB, outer: &PB) -> bool {
 }
 
 pub struct Plan {
+    /// The full seed; for a race file, made again from it (crate::race) and never written out.
     pub seed: SeedFile,
+    /// The race file, for a race seed: the only seed file a race build writes.
+    pub race: Option<ootrr_core::race::RaceFile>,
     pub load: PB,
     pub name: String,
     pub target: PB,
@@ -64,7 +67,7 @@ pub fn delete_others(root: &std::path::Path) -> std::io::Result<Vec<String>> {
             if !p.is_dir() || p == root {
                 continue;
             }
-            if p.join(SPOILER_FILE).is_file() && p.join("romfs").is_dir() {
+            if (p.join(SPOILER_FILE).is_file() || p.join(SEED_FILE).is_file()) && p.join("romfs").is_dir() {
                 fs::remove_dir_all(&p)?;
                 gone.push(p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
             }
@@ -87,10 +90,10 @@ pub fn put_spoiler(root: &PB, text: Option<&str>) -> std::io::Result<()> {
 
 pub const SEED_FILE: &str = "Seed.ootrr";
 
-pub fn put_seed(root: &PB, seed: Option<&SeedFile>) -> std::io::Result<()> {
+pub fn put_seed_text(root: &PB, text: Option<&str>) -> std::io::Result<()> {
     let p: PB = root.join(SEED_FILE);
-    match seed {
-        Some(s) => fs::write(&p, s.to_text()),
+    match text {
+        Some(t) => fs::write(&p, t),
         None if p.is_file() => fs::remove_file(&p),
         None => Ok(()),
     }
@@ -119,15 +122,17 @@ pub struct Place {
 }
 
 pub fn plan(b: &Json) -> Hr<Plan> {
-    let seed: SeedFile = SeedFile::parse(body::text(b, "seed_text")?)?;
     let pl: Place = place(b)?;
     let cos: Cosmetics = cosmetics(b)?;
+    let (seed, race): (SeedFile, Option<ootrr_core::race::RaceFile>) = ootrr_core::race::open(body::text(b, "seed_text")?)?;
     let spoiler: Option<String> = match body::opt_text(b, "spoiler_text")? {
+        // A race seed has no spoiler log, whatever the request carries.
+        _ if race.is_some() || ootrr_core::race::is_race(&seed) => None,
         None | Some("") => None,
         Some(t) if t.len() > SPOILER_MAX => return Err(refuse("Spoiler: the spoiler log is too large.")),
         Some(t) => Some(t.to_string()),
     };
-    Ok(Plan { seed, load: pl.load, name: pl.name, target: pl.target, host: pl.host, cos, spoiler, source: pl.source, with_update: pl.with_update, delete_others: pl.delete_others })
+    Ok(Plan { seed, race, load: pl.load, name: pl.name, target: pl.target, host: pl.host, cos, spoiler, source: pl.source, with_update: pl.with_update, delete_others: pl.delete_others })
 }
 
 /// The cosmetic choices of a build request: music, sound effects, colours and the title line.
@@ -220,8 +225,11 @@ pub fn run(jobs: &Arc<Jobs>, b: &Json) -> Hr<Json> {
     let p: Plan = plan(b)?;
     let target: String = pathsafe::text(&p.target);
     let n: usize = p.seed.placements.len();
+    // A race seed always shows its hash, drawn with the Randomizer line.
+    let hash: Option<Vec<usize>> = p.race.as_ref().map(|_| ootrr_core::race::icons(&p.seed));
+    let title: bool = p.cos.title || hash.is_some();
     let id: u64 = jobs.start(move |c: &Ctl| {
-        c.begin(&format!("Seed file checked, {n} placements"));
+        c.begin(&if hash.is_some() { "Race file checked, the seed was made again and matches its hash".to_string() } else { format!("Seed file checked, {n} placements") });
         c.ok(10);
         if let Some(s) = p.source.step() {
             c.begin(s);
@@ -235,7 +243,7 @@ pub fn run(jobs: &Arc<Jobs>, b: &Json) -> Hr<Json> {
             }
         };
         let romfs: PB = game.romfs.clone();
-        if p.cos.title {
+        if title {
             c.begin("Check that no other mod changes the title screen");
             if let Err(e) = ootrr_core::title_logo::preflight(&p.target, &romfs) {
                 c.mark("failed");
@@ -246,8 +254,8 @@ pub fn run(jobs: &Arc<Jobs>, b: &Json) -> Hr<Json> {
         c.begin("Read the game files and edit the chests");
         match slice::build_for(&p.seed, &romfs, &p.load, &p.name, p.host) {
             Ok(mut built) => {
-                c.begin(if p.cos.title { "Draw the Randomizer line under the title logo" } else { "Leave the title logo as the game's" });
-                match if p.cos.title { ootrr_core::title_logo::apply(&built.root, &romfs) } else { Ok(Vec::new()) } {
+                c.begin(if hash.is_some() { "Draw the Randomizer line and the seed hash on the title logo" } else if title { "Draw the Randomizer line under the title logo" } else { "Leave the title logo as the game's" });
+                match if title { ootrr_core::title_logo::apply_with(&built.root, &romfs, hash.as_deref()) } else { Ok(Vec::new()) } {
                     Ok(notes) => {
                         for n in notes {
                             built.report.push_str(&format!("{n}
@@ -277,18 +285,24 @@ pub fn run(jobs: &Arc<Jobs>, b: &Json) -> Hr<Json> {
                     }
                 }
                 c.ok(90);
-                c.begin(if p.spoiler.is_some() { "Write the spoiler log and seed file" } else { "Remove any old spoiler log and seed file" });
+                c.begin(if p.race.is_some() { "Write the race file, with no spoiler log" } else if p.spoiler.is_some() { "Write the spoiler log and seed file" } else { "Remove any old spoiler log and seed file" });
                 if let Err(e) = put_spoiler(&built.root, p.spoiler.as_deref()) {
                     c.mark("failed");
                     c.finish("failed", &format!("The mod was written, but {SPOILER_FILE} could not be: {e}"));
                     return;
                 }
-                if let Err(e) = put_seed(&built.root, p.spoiler.as_ref().map(|_| &p.seed)) {
+                let seed_text: Option<String> = match &p.race {
+                    Some(rf) => Some(rf.to_text()),
+                    None => p.spoiler.as_ref().map(|_| p.seed.to_text()),
+                };
+                if let Err(e) = put_seed_text(&built.root, seed_text.as_deref()) {
                     c.mark("failed");
                     c.finish("failed", &format!("The mod was written, but {SEED_FILE} could not be: {e}"));
                     return;
                 }
-                if p.spoiler.is_some() {
+                if p.race.is_some() {
+                    built.report.push_str(&format!("Race file (share it so others can build the same seed): {}\n", pathsafe::text(&built.root.join(SEED_FILE))));
+                } else if p.spoiler.is_some() {
                     built.report.push_str(&format!("Spoiler log: {}\n", pathsafe::text(&built.root.join(SPOILER_FILE))));
                     built.report.push_str(&format!("Seed file: {}\n", pathsafe::text(&built.root.join(SEED_FILE))));
                 }

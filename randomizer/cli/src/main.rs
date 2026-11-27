@@ -81,6 +81,7 @@ const USAGE: &str = "usage:
   ootrr intro-skip <romfs_root> <load_dir> <mod_name> [--movie-only | --scene-only | --hold | --hold-and-scene]
   ootrr qol-mod <romfs_root> <load_dir> <mod_name> <skip-story | skip-all | anju | poe | navi-dungeons | navi-everywhere | bunny-speed | bunny-jump | big-chest-anim | owl-warps | gear-cycle | low-health>
   ootrr gear-probe <romfs_root> <out_dir> [seed_player_pack.zs]...
+  ootrr hook-probe <romfs_root> <out_dir> [seed_mod_romfs]
   ootrr door-fix <romfs_root> <load_dir> <mod_name>
   ootrr door-open <romfs_root> <load_dir> <mod_name>
   ootrr deku-bridge-testmod <romfs_root> <load_dir> <mod_name>
@@ -106,7 +107,7 @@ const USAGE: &str = "usage:
   ootrr settings-dump [--compact] [--presets <dir>] [--decode <settings_string>]
   ootrr serve [--port N] [--lan] [--no-open] [--no-update-check] [--stdio]
   ootrr mem-watch [--flags data/flags.json] [--out log.txt]   print every flag the running game flips
-  ootrr generate <settings_string_or_preset_or_file> <seed> <out.ootrr> [--spoiler <file>] [--plando Location=Item]... [--plando-file <file>]
+  ootrr generate <settings_string_or_preset_or_file> <seed> <out.ootrr> [--race] [--spoiler <file>] [--plando Location=Item]... [--plando-file <file>]
   ootrr build <seed.ootrr> <game> <load_dir> <mod_name> [--update <folder|.nup|.nx>] [--include-update] [--host eden|hookshot|longshot|nx2navi] [--music off|grouped|anywhere] [--sfx off|grouped|anywhere] [--colors off|custom|random|shared] [--color-part <part>=<original|random|#rrggbb>]... [--cosmetic-seed <text>] [--no-title-logo]
   ootrr colors-preview <romfs_root> <out_dir> <off|custom|random|shared> <seed_text> [<part>=<colour>...]
   ootrr slice-scan <romfs_root> <out_json>
@@ -368,6 +369,7 @@ fn main() -> ExitCode {
         Some("intro-skip") => intro_cmd::run(&a[1..]),
         Some("qol-mod") => qol_cmd::run(&a[1..]),
         Some("gear-probe") => qol_cmd::gear_probe(&a[1..]),
+        Some("hook-probe") => qol_cmd::hook_probe(&a[1..]),
         Some("door-fix") => door_fix_cmd::run(&a[1..]),
         Some("door-open") => door_open_cmd::run(&a[1..]),
         Some("deku-bridge-testmod") => deku_bridge_cmd::testmod(&a[1..]),

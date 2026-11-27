@@ -78,8 +78,8 @@ edit(js("run.js"), (t) => {
 }
 
 function summary(res) {`);
-  s = must(s, 'done && run.target ? h("p", { class: "genline ready" }, `Mod written to ${run.target}${state.spoiler_log ? ", with Spoiler.txt and Seed.ootrr" : ""}.`) : null,',
-    'done ? h("div", { class: "row" }, h("p", { class: "genline ready" }, `The mod is ready${state.spoiler_log ? ", with Spoiler.txt and Seed.ootrr" : ""}. Download it and unzip it into your mods folder.`), zip_button()) : null,');
+  s = must(s, 'done && run.target ? h("p", { class: "genline ready" }, `Mod written to ${run.target}${files_note()}.`) : null,',
+    'done ? h("div", { class: "row" }, h("p", { class: "genline ready" }, `The mod is ready${files_note()}. Download it and unzip it into your mods folder.`), zip_button()) : null,');
   s = must(s, '"The mod is written as mods/<name>/romfs in the folder you chose. For Hookshot, name it randomizer-<seed> so co-op can match the seed."',
     '"Unzip the download into your Hookshot or Longshot folder, so the mod lands in mods/<name>/romfs. For Hookshot, name it randomizer-<seed> so co-op can match the seed."');
   s = must(s, "`The mod is written to your mod folder, inside a folder named ${state.info.title_id} and then your mod name.`",

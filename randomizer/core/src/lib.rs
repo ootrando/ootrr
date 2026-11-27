@@ -10,9 +10,9 @@ macro_rules! parts {
     };
 }
 
-pub use ootrr_game::{bfevfl, bfres, byml, catalog, catalog_json, chest_slot, dungeon_text, entrance_swap, entrances, error, flags, flags_build, flags_gen, flags_harvest, flags_keyed, flags_map, flags_names, flags_rel, flags_scan, ips, items, json, modpack, msbt, murmur, placement, rng, romfs, rsizetable, sarc, save, tex, zs};
+pub use ootrr_game::{bfevfl, bfres, byml, catalog, catalog_json, chest_slot, dungeon_text, entrance_swap, entrances, error, flags, flags_build, flags_gen, flags_harvest, flags_keyed, flags_map, flags_names, flags_rel, flags_scan, fres, ips, items, json, modpack, msbt, murmur, placement, rng, romfs, rsizetable, sarc, save, tex, zs};
 pub use ootrr_logic::{fill, logic_demo, logic_items, logic_json, logic_synth, logic_val, rule_ast, rules, search, spoiler, tier_chain, world};
-pub use ootrr_cosmetics::{colors, cosmetic, sfx, slink, title_logo};
+pub use ootrr_cosmetics::{colors, cosmetic, hash_art, sfx, slink, title_logo};
 
 pub mod ap;
 pub mod ainb;
@@ -26,11 +26,13 @@ pub mod debug_names;
 pub mod deku_bridge;
 pub mod difficulty;
 pub mod always;
+pub mod bombchu_bag;
 pub mod bombchu_open;
 pub mod door_fix;
 pub mod door_gate;
 pub mod water_gate;
 pub mod lake_tree_wall;
+pub mod zr_front_wall;
 pub mod door_open;
 pub mod dungeon_fixes;
 pub mod dungeon_credit;
@@ -67,6 +69,7 @@ pub mod pot_slice;
 pub mod pots;
 pub mod pregrant;
 pub mod qol;
+pub mod race;
 pub mod progressive;
 pub mod required;
 pub mod bomb_lift;

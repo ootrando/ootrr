@@ -97,7 +97,7 @@ mod tests {
         let n: usize = back.get("settings").and_then(|x| x.as_arr()).map(|a| a.len()).unwrap();
         assert_eq!(n, schema().settings.len());
         let p: usize = back.get("presets").and_then(|x| x.as_arr()).map(|a| a.len()).unwrap();
-        assert_eq!(p, 5);
+        assert_eq!(p, 6);
         assert_eq!(back.get("string_prefix").and_then(|x| x.as_str()), Some("OOTRR1-"));
     }
 

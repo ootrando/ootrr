@@ -250,3 +250,7 @@ html[data-theme="hyrule"] .tip { border-color: #d4a83a; box-shadow: 0 0 18px rgb
 @media (prefers-reduced-motion: reduce) { .w { transition: none; } }
 .mmain .notice.mwarn { font-size: 14px; font-weight: 600; border-color: var(--warn); }
 .mmain .notice.mwarn::before { content: "\26A0  "; }
+/* The seed hash of a race seed: the game's item icons (when the tracker has the game folder) and their names. */
+.hashrow { display: inline-flex; flex-wrap: wrap; gap: 6px 14px; }
+.hashitem { display: inline-flex; align-items: center; gap: 6px; }
+.hashicon { width: 28px; height: 28px; }

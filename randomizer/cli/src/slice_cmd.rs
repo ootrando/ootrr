@@ -49,9 +49,11 @@ pub fn generate(a: &[String]) -> Res<()> {
     let out: &str = arg(a, 2, "missing out file")?;
     let mut o: GenOpts = GenOpts { extras: true, ..GenOpts::default() };
     let mut spoiler: Option<&str> = None;
+    let mut race: bool = false;
     let mut i: usize = 3;
     while i < a.len() {
         match a[i].as_str() {
+            "--race" => race = true,
             "--spoiler" => {
                 i += 1;
                 spoiler = Some(arg(a, i, "--spoiler needs a file")?);
@@ -78,7 +80,20 @@ pub fn generate(a: &[String]) -> Res<()> {
     let live: Arc<Live> = Arc::new(Live::default());
     o.limit = Some(LIMIT);
     o.live = Some(Arc::clone(&live));
+    if race && spoiler.is_some() {
+        return Err(Error::Msg(ootrr_core::race::NO_SPOILER.to_string()));
+    }
     let line: gen_progress::Line = gen_progress::start(live);
+    if race {
+        let r = ootrr_core::race::generate(&s.settings, seed, &o);
+        line.stop();
+        let (g, rf) = r?;
+        fs::write(out, rf.to_text())?;
+        print!("{}", g.report.replace(&g.seed_file.seed, &rf.seed));
+        println!("race file: {out} (no spoiler log; build it with ootrr build)");
+        println!("seed hash: {}", rf.icon_names().join(", "));
+        return Ok(());
+    }
     let r: Res<Generated> = slice::generate_with(&s.settings, seed, &o);
     line.stop();
     let g: Generated = r?;
@@ -153,7 +168,12 @@ pub fn build(a: &[String]) -> Res<()> {
         rest.push(a[i].clone());
         i += 1;
     }
-    let seed: SeedFile = SeedFile::read(P::new(arg(&rest, 0, "missing seed file")?))?;
+    let (seed, race): (SeedFile, Option<ootrr_core::race::RaceFile>) = ootrr_core::race::open(&fs::read_to_string(arg(&rest, 0, "missing seed file")?)?)?;
+    // A race seed always shows its hash, which is drawn with the Randomizer line.
+    let hash: Option<Vec<usize>> = race.as_ref().map(|_| ootrr_core::race::icons(&seed));
+    if hash.is_some() {
+        cos.title = true;
+    }
     let game: &str = arg(&rest, 1, "missing romfs_root")?;
     let load: &str = arg(&rest, 2, "missing load_dir")?;
     let name: &str = arg(&rest, 3, "missing mod_name")?;
@@ -188,7 +208,7 @@ pub fn build(a: &[String]) -> Res<()> {
     let c: &BuildCounts = &b.counts;
     print!("{}", b.report);
     if cos.title {
-        for n in ootrr_core::title_logo::apply(&b.root, P::new(romfs))? {
+        for n in ootrr_core::title_logo::apply_with(&b.root, P::new(romfs), hash.as_deref())? {
             println!("{n}");
         }
     }

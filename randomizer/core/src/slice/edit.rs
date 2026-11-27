@@ -149,12 +149,19 @@ pub fn build_for(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Hos
 }
 
 pub fn build_for_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Host, hook: Option<&mut Hook>) -> Res<Built> {
+    // The race hash is the checksum of the seed as it was generated, before the build's own passes.
+    let race: Option<SeedFile> = crate::race::is_race(seed).then(|| seed.clone());
     let (seed, cold): (SeedFile, Vec<crate::frost::Trap>) = crate::frost::prepare(seed)?;
     let b: Built = crate::slice::seed_packs::build_hooked(&seed, romfs, load, mod_name, host, hook)?;
     let b: Built = crate::shelf::seed::after(&seed, romfs, load, mod_name, host, b)?;
     let b: Built = crate::frost::after(&cold, &seed.seed, romfs, load, mod_name, host, b)?;
     let on: bool = crate::slice::support::plan(&seed.settings()?.settings)?.full_wallet;
-    crate::full_wallet::after(on, romfs, load, mod_name, host, b)
+    let mut b: Built = crate::full_wallet::after(on, romfs, load, mod_name, host, b)?;
+    if let Some(full) = &race {
+        b.report = crate::race::build_report(&b.root, full);
+        b.chests.clear();
+    }
+    Ok(b)
 }
 
 pub type Hook<'a> = dyn FnMut(&mut Romfs, &P, &mut Vec<crate::staging::Out>) -> Res<()> + 'a;
@@ -595,6 +602,7 @@ pub fn build_data(d: Data, seed: &SeedFile, romfs: &P, load: &P, mod_name: &str,
     // A Bow or Slingshot from any gift or pickup brings its starting bag, as a chest's does.
     crate::starter_bags::stage(&mut rf, &mut late, &work)?;
     crate::dungeon_packs::stage(&mut rf, &mut late, &work, &crate::dungeon_packs::credits(&d, seed))?;
+    crate::bombchu_bag::stage(&mut rf, &mut late, &work)?;
     crate::pickup_tiers::stage(&mut rf, &mut late, &work, &crate::pickup_tiers::families(&d, seed))?;
     crate::ocarina_hold::stage(&mut rf, &mut late, &work, crate::ocarina_hold::picked_up(&d, seed))?;
     if let Some(t) = ts.iter().find(|t| t.hash == crate::slice::treasure::FIRST && t.key.is_none() && crate::progressive::guarded(&t.new_actor)) {
@@ -1072,6 +1080,18 @@ mod tests {
             }
             before.sort();
             after.sort();
+            let bag: usize = after.iter().filter(|a| *a == crate::bombchu_bag::ACTOR).count();
+            assert_eq!(bag, 1, "seed tiers {n}");
+            after.retain(|a| a != crate::bombchu_bag::ACTOR);
+            let mut rest: Vec<String> = before.clone();
+            for a in &after {
+                if let Some(i) = rest.iter().position(|b| b == a) {
+                    rest.remove(i);
+                }
+            }
+            assert_eq!(rest.len(), 1, "seed tiers {n}: the bag took one shuffled spot");
+            let gave: usize = before.iter().position(|b| *b == rest[0]).unwrap();
+            before.remove(gave);
             assert_eq!(before, after, "seed tiers {n}");
             let (ts, same, flows): (Vec<Target>, usize, Vec<Choice>) = targets(&d, &g.seed_file).unwrap();
             let moved: std::collections::BTreeSet<&str> = ts.iter().map(|t| t.name.as_str()).filter(|n| g.seed_file.placements.contains_key(*n)).collect();

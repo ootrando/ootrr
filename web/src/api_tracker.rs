@@ -160,6 +160,7 @@ pub fn seed(sh: &Shared, b: &Json) -> Hr<Json> {
     ensure(sh);
     let text: Option<&str> = body::opt_text(b, "seed_text")?.filter(|s| !s.is_empty());
     let sf: Option<SeedFile> = match text {
+        Some(t) if ootrr_core::race::is_race_text(t) => return Err(Fail::new(422, "That is a race file: a race seed keeps its items hidden, so the tracker cannot load where they are. Track it by hand.")),
         Some(t) => Some(SeedFile::parse(t).map_err(|e| Fail::new(422, &format!("That file is not a seed file this version can read. ({e})")))?),
         None => None,
     };

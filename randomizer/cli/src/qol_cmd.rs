@@ -32,6 +32,20 @@ pub fn run(a: &[String]) -> Res<()> {
     Ok(())
 }
 
+/// Writes the Hookshot storage probe mods, on top of a seed mod's romfs when one is given.
+pub fn hook_probe(a: &[String]) -> Res<()> {
+    let root: &str = arg(a, 0, "missing romfs_root")?;
+    let out: &str = arg(a, 1, "missing out_dir")?;
+    let base: Option<&P> = a.get(2).map(|s| P::new(s.as_str()));
+    let mut rf: ootrr_core::romfs::Romfs = ootrr_core::romfs::Romfs::open(P::new(root))?;
+    let files: Vec<std::path::PathBuf> = ootrr_core::qol::hook_probe::probe(&mut rf, P::new(out), base)?;
+    for (_, name, what) in ootrr_core::qol::hook_probe::ALL {
+        println!("{name}: {what}");
+    }
+    println!("{} files under {out}", files.len());
+    Ok(())
+}
+
 pub fn gear_probe(a: &[String]) -> Res<()> {
     let root: &str = arg(a, 0, "missing romfs_root")?;
     let out: &str = arg(a, 1, "missing out_dir")?;

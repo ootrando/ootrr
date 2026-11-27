@@ -667,6 +667,7 @@ mod tests {
             tiers: BTreeMap::new(),
             drops: BTreeMap::new(),
             kits: BTreeMap::new(),
+            cold: Default::default(),
         }
     }
 

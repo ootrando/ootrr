@@ -27,6 +27,10 @@ pub struct SeedFile {
     pub tiers: Map<String, String>,
     pub drops: Map<String, String>,
     pub kits: Map<String, String>,
+    /// Build-time only, never written: the locations crate::frost::prepare turned from Ice Traps
+    /// into the items they look like. Logic that judges the seed (crate::slice::tier_order) reads
+    /// them as junk, as the generator did.
+    pub cold: std::collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,6 +87,7 @@ impl SeedFile {
             tiers: Map::new(),
             drops: Map::new(),
             kits: Map::new(),
+            cold: Default::default(),
         };
         f.check_fields()?;
         Ok(f)
@@ -268,6 +273,7 @@ impl SeedFile {
             tiers: Map::new(),
             drops: Map::new(),
             kits: Map::new(),
+            cold: Default::default(),
         };
         f.check_fields()?;
         let want: String = field(j, "checksum")?.to_string();

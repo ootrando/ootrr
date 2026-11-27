@@ -78,7 +78,7 @@ pub const CELLS: [Cell; 76] = [
     c("sticks", "Deku Sticks", "", "tools", "", 0, Rule::Count("Item_DekuStick"), &["Item_DekuStick"]),
     c("nuts", "Deku Nuts", "", "tools", "", 0, Rule::Count("Item_DekuNut"), &["Item_DekuNut"]),
     c("bombs", "Bombs", "", "tools", "", 0, Rule::Bag { item: "Item_Bomb", bags: BOMB_BAGS, ammo: "Item_Bomb" }, &["Item_Bomb"]),
-    c("bombchus", "Bombchus", "", "tools", "", 0, Rule::Count("Item_Bombchu"), &["Item_Bombchu"]),
+    c("bombchus", "Bombchu Bag", "", "tools", "", 0, Rule::Count("Item_Bombchu"), &["Item_Bombchu"]),
     c("bow", "Fairy Bow", "", "tools", "", 0, Rule::Bag { item: "Weapon_Range_Bow", bags: QUIVERS, ammo: "Item_Arrow_Normal" }, &["Weapon_Range_Bow"]),
     c("fire_arrow", "Fire Arrow", "", "tools", "", 0, Rule::Own(&["Item_Arrow_Fire"]), &["Item_Arrow_Fire_PouchIcon"]),
     c("ice_arrow", "Ice Arrow", "", "tools", "", 0, Rule::Own(&["Item_Arrow_Ice"]), &["Item_Arrow_Ice_PouchIcon"]),

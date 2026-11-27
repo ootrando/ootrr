@@ -33,11 +33,14 @@ pub struct GenOpts {
     pub live: Option<Arc<Live>>,
     pub switch: u32,
     pub extras: bool,
+    /// A race seed (crate::race): rolls with its own seed text, makes no spoiler log and leaves
+    /// where items went out of the report.
+    pub race: bool,
 }
 
 impl Default for GenOpts {
     fn default() -> GenOpts {
-        GenOpts { spoiler: false, tries: TRIES, plando: Vec::new(), limit: None, live: None, switch: SWITCH, extras: false }
+        GenOpts { spoiler: false, tries: TRIES, plando: Vec::new(), limit: None, live: None, switch: SWITCH, extras: false, race: false }
     }
 }
 
@@ -300,6 +303,7 @@ pub fn prepare(d: &Data, s: &Settings, seed: &str, plando: &[Entry]) -> Res<Prep
         p.notes.retain(|n| !pu::is_note(n));
     }
     let pooled: Placement = restore_upgrades(&w, d, &vanilla, &pk.free, &|it: ItemId, l: LocId| allowed(d, &w, &p, it, l));
+    p.notes.push(crate::bombchu_bag::NOTE.to_string());
     let (mut base, gone): (Placement, Vec<String>) = crate::start_items::pool::base(d, &w, &p, &pooled, &pk.free)?;
     p.notes.extend(gone);
     if p.rewards.trade_items {
@@ -312,6 +316,19 @@ pub fn prepare(d: &Data, s: &Settings, seed: &str, plando: &[Entry]) -> Res<Prep
 }
 
 pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Generated> {
+    if o.race && !o.plando.is_empty() {
+        return Err(E::Msg(crate::race::NO_PLANDO.to_string()));
+    }
+    if !o.race && crate::race::reserved(seed) {
+        return Err(E::Msg(crate::race::RESERVED.to_string()));
+    }
+    let rolled: String;
+    let seed: &str = if o.race {
+        rolled = crate::race::rolled(seed);
+        &rolled
+    } else {
+        seed
+    };
     let watch: Watch = Watch::new(o.limit, o.live.clone());
     let Prep { p, mut lay, owned, w, vanilla, pk, gates, base } = prepare(d, s, seed, &o.plando)?;
     let d: &Data = owned.as_ref().unwrap_or(d);
@@ -471,7 +488,10 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     if o.extras {
         crate::frost::sprinkle(d, s, seed, &mut seed_file, &p.excluded);
     }
-    let (sp, spheres): (Option<String>, Steps) = if o.spoiler {
+    if o.race {
+        moved.clear();
+    }
+    let (sp, spheres): (Option<String>, Steps) = if o.spoiler && !o.race {
         let traps: BM<String, String> = crate::frost::prepare(&seed_file)?.1.into_iter().map(|t| (t.loc, format!("Ice Trap (looks like {})", t.look))).collect();
         let (mut t, st): (String, Steps) = spoiler_text(&w, &vanilla, &got, &pk, &traps)?;
         let fixed: BM<String, String> = if crate::slice::tier_fix::active(d, &w, &pk.free) {
@@ -501,7 +521,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     if hand > 0 {
         let _ = writeln!(rep, "Plandomizer: {hand} placements were fixed by hand.");
     }
-    if let Some(l) = &gates {
+    if let Some(l) = gates.as_ref().filter(|_| !o.race) {
         rep.push_str(&crate::entr::text::report(l));
     }
     Ok(Generated { seed_file, counts, report: rep, spoiler: sp, spheres })

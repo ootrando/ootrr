@@ -31,10 +31,28 @@ pub fn run_in(gens: &Gens, b: &Json) -> Hr<Json> {
         Some(s) if !s.trim().is_empty() => s.to_string(),
         _ => token::seed_text(12),
     };
-    let want_spoiler: bool = b.get("spoiler").and_then(|x| x.as_bool()).unwrap_or(true);
+    let race: bool = b.get("race").and_then(|x| x.as_bool()).unwrap_or(false);
+    let want_spoiler: bool = b.get("spoiler").and_then(|x| x.as_bool()).unwrap_or(true) && !race;
     let plando: Vec<Entry> = plando_of(b)?;
+    if race && !plando.is_empty() {
+        return Err(Fail::new(422, ootrr_core::race::NO_PLANDO));
+    }
     let slot: Slot = gens.begin(body::opt_text(b, "ticket")?)?;
     let opts: GenOpts = GenOpts { spoiler: want_spoiler, plando, limit: Some(LIMIT), live: Some(Arc::clone(&slot.live)), extras: true, ..GenOpts::default() };
+    if race {
+        let r = ootrr_core::race::generate(&l.settings, &seed, &opts);
+        drop(slot);
+        let (g, rf) = r?;
+        let mut out: Json = api_seed::describe_race(&rf)?;
+        out.put("warnings", Json::strs(l.warnings.iter().map(|x| x.as_str())));
+        out.put("ok", true.into());
+        out.put("report", g.report.replace(&g.seed_file.seed, &rf.seed).into());
+        out.put("notes", Json::strs(notes(&l).iter().map(|x| x.as_str())));
+        out.put("file_name", format!("ootrr-race-{}.ootrr", slug(&seed)).into());
+        out.put("seed_text", rf.to_text().into());
+        out.put("spoiler", spoiler(&g, false));
+        return Ok(out);
+    }
     let g: Generated = slice::generate_with(&l.settings, &seed, &opts)?;
     drop(slot);
     let mut out: Json = api_seed::describe(&g.seed_file)?;
@@ -98,7 +116,7 @@ fn spoiler(g: &Generated, wanted: bool) -> Json {
     if !wanted {
         return Json::obj()
             .with("available", false.into())
-            .with("reason", "The spoiler was not requested for this seed.".into())
+            .with("reason", if ootrr_core::race::is_race(&g.seed_file) { ootrr_core::race::NO_SPOILER } else { "The spoiler was not requested for this seed." }.into())
             .with("locations", Json::Arr(Vec::new()))
             .with("playthrough", Json::Arr(Vec::new()));
     }
@@ -162,6 +180,32 @@ mod tests {
         let locs: &[Json] = o.get("locations").and_then(|x| x.as_arr()).unwrap();
         assert!(locs.iter().any(|x| x.as_str() == Some("KF Midos Top Left Chest")));
         assert!(o.get("items").and_then(|x| x.as_arr()).unwrap().iter().any(|x| x.as_str() == Some("Boomerang")));
+    }
+
+    #[test]
+    fn a_race_seed_hands_out_no_items() {
+        let r: Json = run(&j(r#"{"seed":"race day","settings":{"shuffle_mapcompass":"vanilla"},"race":true,"spoiler":true}"#)).unwrap();
+        assert_eq!(r.get("race").and_then(|x| x.as_bool()), Some(true));
+        assert_eq!(r.get("placement_count").and_then(|x| x.as_i64()), Some(0));
+        assert_eq!(r.get("placements").and_then(|x| x.as_arr()).map(|x| x.len()), Some(0));
+        let sp: &Json = r.get("spoiler").unwrap();
+        assert_eq!(sp.get("available").and_then(|x| x.as_bool()), Some(false));
+        assert_eq!(sp.get("locations").and_then(|x| x.as_arr()).map(|x| x.len()), Some(0));
+        assert_eq!(r.get("hash").and_then(|x| x.as_arr()).map(|x| x.len()), Some(ootrr_core::hash_art::SLOTS));
+        let t: &str = r.get("seed_text").and_then(|x| x.as_str()).unwrap();
+        assert!(ootrr_core::race::is_race_text(t) && SeedFile::parse(t).is_err());
+        assert!(!t.contains("Kokiri Sword\"") && !t.contains("placements"), "{t}");
+        let report: &str = r.get("report").and_then(|x| x.as_str()).unwrap();
+        assert!(!report.contains("Changed chests") && !report.contains(&ootrr_core::race::rolled("race day")), "{report}");
+        assert!(!report.contains("KF Midos Top Left Chest: "), "{report}");
+        let back: Json = api_seed::read(&Json::obj().with("seed_text", t.into())).unwrap();
+        assert_eq!(back.get("hash"), r.get("hash"));
+        assert_eq!(back.get("checksum"), r.get("checksum"));
+        let plando: &str = r#"{"seed":"p","settings":{"shuffle_chests":"all"},"race":true,"plando":[{"location":"KF Midos Top Left Chest","item":"Boomerang"}]}"#;
+        assert_eq!(run(&j(plando)).unwrap_err().status, 422);
+        let plain: Json = run(&j(r#"{"seed":"race day","settings":{"shuffle_mapcompass":"vanilla"}}"#)).unwrap();
+        assert_ne!(plain.get("checksum"), r.get("checksum"));
+        assert_eq!(run(&j(r#"{"seed":"race:0123","settings":{}}"#)).unwrap_err().status, 422);
     }
 
     #[test]

@@ -127,6 +127,7 @@ pub(crate) fn actors_for(d: &Data, seed: &SeedFile) -> Res<BM<String, String>> {
         if pl.rewards.trade_items {
             crate::open_world::trade_shuffle::fit_actors(d, item, locs.len(), &mut acts);
         }
+        crate::bombchu_bag::pool::fit_actors(item, locs.len(), &mut acts);
         if crate::slice::data::loose() && acts.len() != locs.len() {
             adjust(d, item, locs.len() as isize - acts.len() as isize, &mut acts);
         }
@@ -303,7 +304,31 @@ pub(crate) fn targets_with(d: &Data, seed: &SeedFile, roam: bool, fixed: &BM<Str
         }
     }
     out.extend(unshuffled_bomb_chests(d, seed));
+    out.extend(unshuffled_bag_home(d, seed));
     Ok((out, same, flows))
+}
+
+fn unshuffled_bag_home(d: &Data, seed: &SeedFile) -> Vec<Target> {
+    let home: &str = crate::bombchu_bag::pool::HOME;
+    let Some(l) = d.cat.by_name(home).filter(|_| !seed.placements.contains_key(home) && d.state_of(home) == Some(State::Eligible)) else {
+        return Vec::new();
+    };
+    l.refs
+        .iter()
+        .map(|r| Target {
+            name: l.name.clone(),
+            hash: r.hash,
+            files: r.files.clone(),
+            old_item: crate::bombchu_bag::ITEM.to_string(),
+            new_item: crate::bombchu_bag::ITEM.to_string(),
+            old_actor: l.item.clone(),
+            new_actor: crate::bombchu_bag::ACTOR.to_string(),
+            ev: d.event_mode(r.hash),
+            family: None,
+            key: None,
+            heart_chest: false,
+        })
+        .collect()
 }
 
 /// Chests that keep their vanilla bombs because this seed does not shuffle them. Opened before

@@ -7,8 +7,9 @@ use super::{Settings, schema};
 use crate::error::{Error, Res};
 use crate::json::{self, Json};
 
-const BUILTIN: [(&str, &str); 5] = [
+const BUILTIN: [(&str, &str); 6] = [
     ("default", include_str!("../../../../data/presets/default.json")),
+    ("races", include_str!("../../../../data/presets/races.json")),
     ("easy", include_str!("../../../../data/presets/easy.json")),
     ("keysanity", include_str!("../../../../data/presets/keysanity.json")),
     ("full_shuffle", include_str!("../../../../data/presets/full_shuffle.json")),
@@ -179,6 +180,20 @@ mod tests {
         assert_eq!(disk, emb);
         assert_eq!(load_dir(&root_dir()).unwrap(), builtin().unwrap());
     }
+
+    #[test]
+    fn the_races_preset_is_the_pre_release_race_string() {
+        let v: Vec<Preset> = builtin().unwrap();
+        assert_eq!(v[1].id, "races", "the race preset sits right under the default");
+        let s: Settings = v[1].apply(&Settings::default()).unwrap();
+        // The string as it was handed over decodes to exactly the preset (this build may write
+        // the same settings as a different, canonical string).
+        let l = Settings::decode(RACES_STRING).unwrap();
+        assert!(l.warnings.is_empty(), "{:?}", l.warnings);
+        assert_eq!(l.settings, s);
+    }
+
+    const RACES_STRING: &str = "OOTRR1-AMAQABABAADQCAINNQCBER2GEBEEEQJAGE2TAMBAKBXWS3TUOMOUWYLLEAYTAMBAI5XWYZBAKNVXK3DMOR2WYYJAKJSXOYLSMQOEWYLLEA2DAICHN5WGIICTNN2WY3DUOVWGCICSMV3WC4TEDRFWC2ZAGUYCAR3PNRSCAU3LOVWGY5DVNRQSAUTFO5QXEZAQAEAREAIADAAQIGYBBAPACAJEAIARSJQBAETQCAJIAEBCSAIBFYAQCMYBAE3ACAJ2AECUMAICI4AQCSABAFEQCAKKAEBEWAIBJQAQCTIBAFHACASPAEAVACQJAAAQEAYEAUDAOCCSAEAVGAIBMAAQCYIBAJRACATEAEAWKAIBM4AQ42YBAFWQCA4FAEAQDBYBAEAISAIBAGFACAIBRUAQCAMVAEAQDGIBAEA2CAIBAGRQCAIBUQAQCAOLAEAQDTABAEA42AIBBTBTK";
 
     #[test]
     fn json_round_trip() {

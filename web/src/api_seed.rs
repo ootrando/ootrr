@@ -1,5 +1,6 @@
 use ootrr_core::json::Json;
 use ootrr_core::settings::Loaded;
+use ootrr_core::race::RaceFile;
 use ootrr_core::settings::seed::SeedFile;
 
 use crate::api_settings;
@@ -24,8 +25,30 @@ pub fn describe(sf: &SeedFile) -> Hr<Json> {
     Ok(out)
 }
 
+/// A race file: what it was made from and its hash, never its items (crate::race).
+pub fn describe_race(rf: &RaceFile) -> Hr<Json> {
+    let l: Loaded = ootrr_core::settings::Settings::decode(&rf.settings_string)?;
+    let mut out: Json = api_settings::reply(&l)?;
+    out.put("seed", rf.seed.as_str().into());
+    out.put("game", rf.game.as_str().into());
+    out.put("generator", rf.generator.as_str().into());
+    out.put("checksum", rf.hash.as_str().into());
+    out.put("placement_count", Json::Int(0));
+    out.put("placements_ready", true.into());
+    out.put("placements", Json::Arr(Vec::new()));
+    out.put("race", true.into());
+    out.put("hash", Json::strs(rf.icon_names().into_iter()));
+    out.put("hash_ids", Json::strs(rf.icon_ids().into_iter()));
+    Ok(out)
+}
+
 pub fn read(b: &Json) -> Hr<Json> {
-    let sf: SeedFile = SeedFile::parse(body::text(b, "seed_text")?).map_err(|e| Fail::new(422, &format!("That file is not a seed file this version can read. ({e})")))?;
+    let text: &str = body::text(b, "seed_text")?;
+    if ootrr_core::race::is_race_text(text) {
+        let rf: RaceFile = RaceFile::parse(text).map_err(|e| Fail::new(422, &format!("That race file cannot be read. ({e})")))?;
+        return describe_race(&rf);
+    }
+    let sf: SeedFile = SeedFile::parse(text).map_err(|e| Fail::new(422, &format!("That file is not a seed file this version can read. ({e})")))?;
     describe(&sf)
 }
 

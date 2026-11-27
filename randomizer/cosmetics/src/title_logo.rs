@@ -303,7 +303,7 @@ fn swap_name(b: &mut [u8], old: &str, new: &str) -> usize {
 /// Common layout archive and the Title one, point at it. The Common layout uses the Title archive's
 /// texture on the title screen (confirmed in the game, 2026-11-18). None when anything does not
 /// fit, and then both archives get the line.
-fn title_only(mod_root: &P, rf: &mut Romfs, p: &Patch) -> Res<Option<Vec<String>>> {
+fn title_only(mod_root: &P, rf: &mut Romfs, p: &Patch, hash: Option<&[usize]>) -> Res<Option<Vec<String>>> {
     let (Some(title), Some(common)) = (p.files.iter().find(|f| f.contains("/Title.")), p.files.iter().find(|f| f.contains("/Common."))) else {
         return Ok(None);
     };
@@ -316,6 +316,7 @@ fn title_only(mod_root: &P, rf: &mut Romfs, p: &Patch) -> Res<Option<Vec<String>
     if !apply_raw(&mut raw, p)? {
         return Ok(None);
     }
+    draw_hash(&mut raw, p, hash, rf)?;
     let names: Vec<String> = bntx::parse(&raw)?.into_iter().map(|t| t.name).collect();
     let others: Vec<String> = bntx::parse(&rf.read_zs(common)?)?.into_iter().map(|t| t.name).collect();
     if !dic_ok(&raw, &names) {
@@ -450,12 +451,34 @@ fn check(mod_root: &P, rf: &mut Romfs, p: &Patch) -> Res<()> {
     Ok(())
 }
 
+/// Draws the seed hash icons (crate::hash_art) into the logo texture of the texture file `raw`.
+fn draw_hash(raw: &mut [u8], p: &Patch, hash: Option<&[usize]>, rf: &mut Romfs) -> Res<()> {
+    let Some(icons) = hash else {
+        return Ok(());
+    };
+    let ts: Vec<Tex> = bntx::parse(raw)?;
+    let t: Tex = bntx::find(&ts, &p.texture).cloned().ok_or(E::Format("title logo: the logo texture is missing"))?;
+    crate::hash_art::draw(raw, &t, icons, rf)
+}
+
 pub fn apply(mod_root: &P, romfs: &P) -> Res<Vec<String>> {
+    apply_with(mod_root, romfs, None)
+}
+
+/// The Randomizer line, and with `hash` the seed hash icons under it (crate::hash_art).
+pub fn apply_with(mod_root: &P, romfs: &P, hash: Option<&[usize]>) -> Res<Vec<String>> {
     let p: Patch = patch()?;
     let mut rf: Romfs = Romfs::open(romfs)?;
     check(mod_root, &mut rf, &p)?;
-    if let Some(notes) = title_only(mod_root, &mut rf, &p)? {
-        return Ok(notes);
+    let named = |mut notes: Vec<String>| -> Vec<String> {
+        if let Some(icons) = hash {
+            let n: Vec<&str> = icons.iter().filter_map(|i| crate::hash_art::ICONS.get(*i).map(|x| x.1)).collect();
+            notes.push(format!("Seed hash on the title screen: {}", n.join(", ")));
+        }
+        notes
+    };
+    if let Some(notes) = title_only(mod_root, &mut rf, &p, hash)? {
+        return Ok(named(notes));
     }
     let mut notes: Vec<String> = Vec::new();
     for f in &p.files {
@@ -464,6 +487,7 @@ pub fn apply(mod_root: &P, romfs: &P) -> Res<Vec<String>> {
         if !apply_raw(&mut raw, &p)? {
             continue;
         }
+        draw_hash(&mut raw, &p, hash, &mut rf)?;
         if let Some(d) = out.parent() {
             fs::create_dir_all(d)?;
         }
@@ -475,7 +499,7 @@ pub fn apply(mod_root: &P, romfs: &P) -> Res<Vec<String>> {
         notes.push(format!("Title logo: the Randomizer line is drawn under the logo in {f} ({:.1} MB)", mb(z.len())));
         fs::write(&out, z)?;
     }
-    Ok(notes)
+    Ok(named(notes))
 }
 
 #[cfg(test)]

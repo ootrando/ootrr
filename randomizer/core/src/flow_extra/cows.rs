@@ -1,6 +1,8 @@
+use std::collections::BTreeMap as BM;
+
 use crate::error::{Error as E, Res};
 use crate::flow_extra::data::{Extra, Spec};
-use crate::flow_extra::op::How;
+use crate::flow_extra::op::{How, Op};
 use crate::flow_locations::{Change, Loc};
 
 pub const SETTING: &str = "shuffle_cows";
@@ -61,6 +63,28 @@ pub fn changes(l: &Loc, item: &str) -> Res<Vec<Change>> {
 
 pub fn plain(c: &Change) -> bool {
     c.role != ROLE
+}
+
+pub struct ProgressiveGrant {
+    pub op: Op,
+    pub family: &'static str,
+    pub forms: Vec<String>,
+}
+
+pub fn progressive_grants(d: &crate::slice::data::Data, placed: &BM<String, &'static str>) -> Res<Vec<ProgressiveGrant>> {
+    let mut out: Vec<ProgressiveGrant> = Vec::new();
+    for (loc, family) in placed.iter().filter(|(loc, _)| is(loc)) {
+        let s: Spec = spec(loc)?;
+        let [op] = s.ops.as_slice() else {
+            return Err(E::Msg(format!("{loc} must have exactly one once grant edit")));
+        };
+        if !matches!(op.how, How::Once(_)) {
+            return Err(E::Msg(format!("{loc} has no once grant edit")));
+        }
+        let tier: &str = crate::progressive::tiers(family)?[0];
+        out.push(ProgressiveGrant { op: op.bind(tier), family, forms: crate::ocarina_hold::forms(d, loc, family) });
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

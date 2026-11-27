@@ -325,6 +325,7 @@ pub fn build_data(d: Data, seed: &SeedFile, romfs: &P, load: &P, mod_name: &str,
     let placed: BM<String, &'static str> = flow_wraps(&d, seed);
     let chest_fams: BS<&str> = upgrades.iter().map(|u| u.0.as_str()).collect();
     let gs: Vec<crate::progressive::Grant> = wrap_grants(&d, seed, &chest_fams, &placed);
+    let cow_grants: Vec<crate::flow_extra::cows::ProgressiveGrant> = crate::flow_extra::cows::progressive_grants(&d, &placed)?;
     if !upgrades.is_empty() || roam || gr.active() || !passes.silver_used.is_empty() {
         let mut outs: Vec<crate::staging::Out> = if !upgrades.is_empty() || roam { stage_upgrades(&mut rf, &upgrades, None, &kids, &keys)? } else { Vec::new() };
         crate::dungeon_grant::stage(&mut rf, &mut outs, &gr, &passes.marks.used)?;
@@ -345,7 +346,7 @@ pub fn build_data(d: Data, seed: &SeedFile, romfs: &P, load: &P, mod_name: &str,
             }
         }
     }
-    let mut staged: Stage = flow_locations::stage_merged(&mut rf, &d.flow, &flows, &gs, &FlowOpts { songs: p.songs != Songs::Off, untested: true, trades: p.rewards.trade_items })?;
+    let mut staged: Stage = flow_locations::stage_merged(&mut rf, &d.flow, &flows, &gs, &cow_grants, &FlowOpts { songs: p.songs != Songs::Off, untested: true, trades: p.rewards.trade_items })?;
     crate::scrubs_b::stage_flow(&mut rf, &scrub_jobs, &mut staged.files)?;
     crate::scrub_prices::stage(&mut rf, &d, seed, p.rewards.scrub_prices, &mut staged.files)?;
     crate::merchant_prices::stage_medigoron(&mut rf, seed, p.rewards.merchant_prices, p.rewards.medigoron, &mut staged.files)?;

@@ -15,6 +15,7 @@ struct Work<'a> {
     reqs: Vec<Req>,
     ops: Vec<Op>,
     grants: Vec<&'a Grant>,
+    cow_grants: Vec<&'a crate::flow_extra::cows::ProgressiveGrant>,
     ammo: Vec<(usize, String, String)>,
     bags: Vec<(usize, String)>,
 }
@@ -22,7 +23,7 @@ struct Work<'a> {
 /// The roles whose change hands the placed item to the player.
 const GIVES: [&str; 2] = ["grant", "give"];
 
-pub fn stage_merged(rf: &mut Romfs, d: &Data, cs: &[Choice], gs: &[Grant], o: &Opts) -> Res<Stage> {
+pub fn stage_merged(rf: &mut Romfs, d: &Data, cs: &[Choice], gs: &[Grant], cows: &[crate::flow_extra::cows::ProgressiveGrant], o: &Opts) -> Res<Stage> {
     let (changes, same, untested): (Vec<Change>, usize, Vec<String>) = plan(d, cs, o)?;
     let mut by: BM<String, Work> = BM::new();
     for c in changes.iter().filter(|c| crate::flow_extra::trade::plain(c)) {
@@ -46,6 +47,9 @@ pub fn stage_merged(rf: &mut Romfs, d: &Data, cs: &[Choice], gs: &[Grant], o: &O
     for g in gs {
         by.entry(g.file.clone()).or_default().grants.push(g);
     }
+    for g in cows {
+        by.entry(g.op.file.clone()).or_default().cow_grants.push(g);
+    }
     let mut files: Vec<StagedFile> = Vec::new();
     for (file, w) in &by {
         let path: String = path_of(file);
@@ -56,6 +60,10 @@ pub fn stage_merged(rf: &mut Romfs, d: &Data, cs: &[Choice], gs: &[Grant], o: &O
         }
         for x in &w.ops {
             apply_op(&mut b, x).map_err(|e| E::Msg(format!("{} edit on {}: {e}", x.kind(), x.file)))?;
+        }
+        for g in &w.cow_grants {
+            crate::flow_extra::progressive_once(&mut b, &g.op, g.family, &g.forms)
+                .map_err(|e| E::Msg(format!("progressive cow edit on {}: {e}", g.op.file)))?;
         }
         for g in &w.grants {
             let f: &mut Flow = b.flows.first_mut().ok_or(E::Format("flow_locations: the file holds no flow"))?;
@@ -75,7 +83,7 @@ pub fn stage_merged(rf: &mut Romfs, d: &Data, cs: &[Choice], gs: &[Grant], o: &O
         if Bf::parse(&out)? != b {
             return Err(E::Format("flow_locations: the written flow does not parse back to the edited model"));
         }
-        let dict: Option<u32> = if w.reqs.is_empty() && w.ops.is_empty() && w.ammo.is_empty() && w.bags.is_empty() { id } else { Some(id.unwrap_or(FRAME_DICT)) };
+        let dict: Option<u32> = if w.reqs.is_empty() && w.ops.is_empty() && w.cow_grants.is_empty() && w.ammo.is_empty() && w.bags.is_empty() { id } else { Some(id.unwrap_or(FRAME_DICT)) };
         files.push(StagedFile { path, z: zs::compress_raw(&out, dict)?, old: raw.len(), new: out.len() });
     }
     Ok(Stage { files, changes, same, untested })
@@ -139,6 +147,42 @@ mod tests {
     }
 
     #[test]
+    fn progressive_cow_grants_are_staged_without_replacing_the_milk() {
+        let r = ootrr_game::test_romfs::path();
+        if !r.join("Pack").join("ZsDic.pack.zs").is_file() {
+            eprintln!("skipped: no romfs at {}, set OOTRR_ROMFS", r.display());
+            return;
+        }
+        let d = crate::slice::data::Data::load().unwrap();
+        let placed: BM<String, &'static str> = crate::flow_extra::cows::LOCS.iter()
+            .chain(crate::flow_extra::cows::OTHER.iter())
+            .filter(|name| **name != "GF Cow")
+            .map(|name| (name.to_string(), "BombBag"))
+            .collect();
+        let cows = crate::flow_extra::cows::progressive_grants(&d, &placed).unwrap();
+        let cs = vec![Choice { location: "GF Cow".to_string(), item: "Item_HoverBoot".to_string() }];
+        let mut rf = Romfs::open(&r).unwrap();
+        let stage = stage_merged(&mut rf, &d.flow, &cs, &[], &cows, &Opts { untested: true, ..Opts::default() }).unwrap();
+        for loc in placed.keys() {
+            let l = d.flow.by_name(loc).unwrap();
+            let e = &l.edits[0];
+            let original = Bf::parse(&crate::cow_clone::read(&mut rf, &e.file).unwrap().0).unwrap();
+            let path = path_of(&e.file);
+            let staged = stage.files.iter().find(|f| f.path == path).unwrap();
+            let changed = Bf::parse(&rf.zs.decompress(&staged.z).unwrap()).unwrap();
+            let f = &changed.flows[0];
+            assert_eq!(f.events[e.index], original.flows[0].events[e.index], "{loc} milk");
+            let flag = crate::flow_extra::cows::flag_of(loc).unwrap();
+            assert!(f.events.iter().any(|e| e.kind.params().and_then(|p| p.get("GameDataName")) == Some(&Val::Str(flag.clone()))), "{loc} gate");
+            for tier in crate::progressive::tiers("BombBag").unwrap() {
+                assert!(f.events.iter().any(|e| matches!(&e.kind, Kind::Sub { flow, entry, params, .. }
+                    if flow == "Dm_SY_GetInEvent" && entry == "GetInEvent_NotTurn_NotNpc"
+                    && params.as_ref().and_then(|p| p.get("ActorName")) == Some(&Val::Str(tier.to_string())))), "{loc} {tier}");
+            }
+        }
+    }
+
+    #[test]
     fn gated_ops_param_edits_and_wraps_share_the_real_files() {
         use std::path::PathBuf as PB;
         let r: PB = ootrr_game::test_romfs::path();
@@ -154,7 +198,7 @@ mod tests {
             .collect();
         let o: Opts = Opts::default();
         let plain: Stage = crate::flow_locations::stage(&mut rf, &sd.flow, &cs, &o).unwrap();
-        let merged: Stage = stage_merged(&mut rf, &sd.flow, &cs, &[], &o).unwrap();
+        let merged: Stage = stage_merged(&mut rf, &sd.flow, &cs, &[], &[], &o).unwrap();
         assert_eq!(plain.files.len(), merged.files.len());
         for (a, b) in plain.files.iter().zip(&merged.files) {
             assert_eq!(a.path, b.path);
@@ -163,7 +207,7 @@ mod tests {
         let fam: &'static str = sd.family("Progressive Wallet").unwrap();
         let gs: Vec<Grant> = sd.grants(fam).into_iter().filter(|g| g.file == "GatheringTokenGold.bfevfl").collect();
         assert!(!gs.is_empty());
-        let both: Stage = stage_merged(&mut rf, &sd.flow, &cs, &gs, &o).unwrap();
+        let both: Stage = stage_merged(&mut rf, &sd.flow, &cs, &gs, &[], &o).unwrap();
         assert_eq!(both.files.len(), merged.files.len());
         let at: usize = both.files.iter().position(|f| f.path.contains("GatheringTokenGold")).unwrap();
         let raw: Vec<u8> = rf.zs.decompress(&both.files[at].z).unwrap();

@@ -277,7 +277,7 @@ fn stacked(f: &Flow, cur: u16, main: u16, val: u32) -> bool {
     a.name == PLAYER && a.queries.get(usize::from(*query)).map(|q| q.as_str()) == Some(CHILD) && cases.iter().any(|c| c.val == val && c.ev == main)
 }
 
-fn once(f: &mut Flow, o: &Op, w: &Once) -> Res<()> {
+fn once(f: &mut Flow, o: &Op, w: &Once) -> Res<u16> {
     let at: usize = f
         .entries
         .iter()
@@ -315,7 +315,17 @@ fn once(f: &mut Flow, o: &Op, w: &Once) -> Res<()> {
     }
     f.entries[at].main = head;
     f.entries[at].subs.push(grant);
-    Ok(())
+    Ok(grant)
+}
+
+pub fn progressive_once(b: &mut Bf, o: &Op, family: &str, forms: &[String]) -> Res<()> {
+    let How::Once(w) = &o.how else {
+        return Err(E::Format("flow extra: a progressive once grant needs a once operation"));
+    };
+    let f: &mut Flow = b.flows.first_mut().ok_or(E::Format("flow extra: the file holds no flow"))?;
+    let grant: u16 = once(f, o, w)?;
+    let name: String = f.events[usize::from(grant)].name.clone();
+    crate::progressive::wrap_grant_as(f, usize::from(grant), &name, "ActorName", family, forms)
 }
 
 fn owns(actor: &str) -> Cont {
@@ -382,7 +392,7 @@ pub fn apply(b: &mut Bf, o: &Op) -> Res<()> {
         How::Insert { flag } => insert(f, o, flag),
         How::Rename { old, new } => rename(f, old, new),
         How::Clone { param, old, new } => crate::flow_extra::clone::clone_sub(f, o.index, &o.event, param, old, new),
-        How::Once(w) => once(f, o, w),
+        How::Once(w) => once(f, o, w).map(|_| ()),
         How::Next { old, new } => next(f, o, *old, *new),
         How::Backfill(w) => backfill(f, o, w),
         How::Set { .. } => Ok(()),
@@ -560,6 +570,30 @@ mod tests {
     }
 
     #[test]
+    fn progressive_once_selects_the_tier_before_the_unchanged_milk_path() {
+        let mut b: Bf = sample();
+        let original: Vec<Event> = b.flows[0].events.clone();
+        progressive_once(&mut b, &once_op(false), "Hookshot", &[]).unwrap();
+        let f: &Flow = &round(&b).flows[0];
+        assert_eq!(&f.events[..original.len()], original.as_slice());
+        let Kind::Switch { cases: gate, .. } = &f.events[usize::from(f.entries[0].main)].kind else { panic!("flag gate") };
+        assert_eq!(gate.iter().find(|c| c.val == 0).unwrap().ev, 0);
+        let set: u16 = gate.iter().find(|c| c.val == 1).unwrap().ev;
+        let Kind::Action { next: grant, params, .. } = &f.events[usize::from(set)].kind else { panic!("set flag") };
+        assert_eq!(params.as_ref().and_then(|c| c.get("GameDataName")), Some(&Val::Str("Flag_Once".to_string())));
+        let Kind::Switch { cases, params, .. } = &f.events[usize::from(*grant)].kind else { panic!("tier check") };
+        assert_eq!(params.as_ref().and_then(|c| c.get("ActorName")), Some(&Val::Str("Item_Hookshot".to_string())));
+        for (owned, item) in [(0, "Item_Longshot"), (1, "Item_Hookshot")] {
+            let at: u16 = cases.iter().find(|c| c.val == owned).unwrap().ev;
+            let Kind::Sub { next, flow, entry, params } = &f.events[usize::from(at)].kind else { panic!("tier grant") };
+            assert_eq!((*next, flow.as_str(), entry.as_str()), (0, "G", "Grant"));
+            assert_eq!(params.as_ref().and_then(|c| c.get("ActorName")), Some(&Val::Str(item.to_string())));
+            assert!(f.entries[0].subs.contains(&at));
+        }
+        assert!(!f.entries[0].subs.contains(grant));
+    }
+
+    #[test]
     fn once_with_the_child_check_leaves_adults_on_the_old_path() {
         let mut b: Bf = sample();
         apply(&mut b, &once_op(true)).unwrap();
@@ -619,6 +653,44 @@ mod tests {
             assert_eq!(b, after);
         }
         assert!(apply(&mut sample(), &aged(true, true, "Flag_Both")).is_err());
+    }
+
+    #[test]
+    fn progressive_and_plain_gerudo_cow_gates_remain_independent() {
+        for both_progressive in [false, true] {
+            for kid_first in [false, true] {
+                let kid: Op = aged(true, false, "Flag_Kid");
+                let adult: Op = aged(false, true, "Flag_Adult");
+                let mut b: Bf = sample();
+                let add_kid = |b: &mut Bf| progressive_once(b, &kid, "Hookshot", &[]).unwrap();
+                let add_adult = |b: &mut Bf| {
+                    if both_progressive {
+                        progressive_once(b, &adult, "Wallet", &[]).unwrap();
+                    } else {
+                        apply(b, &adult).unwrap();
+                    }
+                };
+                if kid_first {
+                    add_kid(&mut b);
+                    add_adult(&mut b);
+                } else {
+                    add_adult(&mut b);
+                    add_kid(&mut b);
+                }
+                let f: &Flow = &round(&b).flows[0];
+                assert_eq!(&f.events[..3], sample().flows[0].events.as_slice());
+                let Kind::Switch { cases, .. } = &f.events[usize::from(f.entries[0].main)].kind else { panic!("age gate") };
+                for (age, flag, progressive) in [(0, "Flag_Kid", true), (1, "Flag_Adult", both_progressive)] {
+                    let at: u16 = cases.iter().find(|c| c.val == age).unwrap().ev;
+                    let (name, flags): (String, Vec<Case>) = flag_of(f, at);
+                    assert_eq!(name, flag);
+                    assert_eq!(flags.iter().find(|c| c.val == 0).unwrap().ev, 0);
+                    let set: u16 = flags.iter().find(|c| c.val == 1).unwrap().ev;
+                    let Kind::Action { next, .. } = &f.events[usize::from(set)].kind else { panic!("flag write") };
+                    assert_eq!(matches!(f.events[usize::from(*next)].kind, Kind::Switch { .. }), progressive);
+                }
+            }
+        }
     }
 
     #[test]

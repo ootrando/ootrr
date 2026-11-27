@@ -37,6 +37,9 @@ pub fn grants(d: &Data, seed: &SeedFile, chest_families: &BS<&str>, placed: &BM<
         out.extend(d.grants_except(f.0, &|n| seed.placements.contains_key(n)));
     }
     for (loc, f) in placed {
+        if crate::flow_extra::cows::is(loc) {
+            continue;
+        }
         let Some(l) = d.flow.by_name(loc) else {
             continue;
         };
@@ -95,6 +98,36 @@ mod tests {
         let g2: Vec<Grant> = grants(&d, &s, &chest, &w);
         assert!(g2.iter().all(|x| x.index != 245));
         assert!(g2.iter().any(|x| x.index == 247 && x.family == "Wallet"));
+    }
+
+    #[test]
+    fn progressive_cows_use_once_grants_instead_of_wrapping_the_milk() {
+        let d: Data = Data::load().unwrap();
+        let s: SeedFile = seed_with(&d, &[
+            ("KF Links House Cow", "Bow"),
+            ("GV Cow", "Deku Stick Capacity"),
+            ("GF Cow", "Magic Meter"),
+            ("DMT Cow Grotto Cow", "Bomb Bag"),
+        ]);
+        let w: BM<String, &'static str> = wraps(&d, &s);
+        assert_eq!(w.len(), 4);
+        let gs: Vec<Grant> = grants(&d, &s, &BS::new(), &w);
+        assert!(!gs.iter().any(|g| g.file.starts_with("Animal_Cow")));
+        let cows = crate::flow_extra::cows::progressive_grants(&d, &w).unwrap();
+        assert_eq!(cows.len(), 4);
+        for g in cows {
+            let crate::flow_extra::How::Once(w) = &g.op.how else { panic!("cow grant is not once") };
+            assert_eq!(w.sub, "Dm_SY_GetInEvent:GetInEvent_NotTurn_NotNpc");
+            assert_eq!(w.params.iter().find(|(k, _)| k == "ActorName").map(|(_, v)| v),
+                Some(&crate::bfevfl::Val::Str(crate::progressive::tiers(g.family).unwrap()[0].to_string())));
+        }
+        let held: BM<String, &'static str> = [("KF Links House Cow".to_string(), "Ocarina")].into_iter().collect();
+        let cows = crate::flow_extra::cows::progressive_grants(&d, &held).unwrap();
+        assert_eq!(cows[0].forms, crate::ocarina_hold::forms_of("Ocarina"));
+        let held_seed: SeedFile = seed_with(&d, &[("KF Links House Cow", "Ocarina")]);
+        let packs = crate::ocarina_hold::wanted(&d, &held_seed);
+        assert!(packs.iter().any(|(loc, p)| loc == "KF Links House Cow" && p.pack == "Obj_Ocarina_Fairy"));
+        assert!(packs.iter().any(|(loc, p)| loc == "KF Links House Cow" && p.pack == "Obj_Ocarina_TimeLand"));
     }
 
     #[test]

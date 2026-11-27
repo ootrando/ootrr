@@ -95,7 +95,8 @@ pub fn is_form(actor: &str) -> bool {
 }
 
 fn holds_up(d: &Data, loc: &str) -> bool {
-    d.flow.by_name(loc).is_some_and(crate::slice::flow_rules::holds_up)
+    // Cow metadata describes the vanilla bottle call, not the shuffled hold-up grant.
+    crate::flow_extra::cows::is(loc) || d.flow.by_name(loc).is_some_and(crate::slice::flow_rules::holds_up)
 }
 
 /// The actor `loc` hands out for `actor`: its pickup actor at a hold up gift.

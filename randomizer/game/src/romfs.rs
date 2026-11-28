@@ -35,6 +35,10 @@ impl Romfs {
         Ok(Romfs { root: root.to_path_buf(), zs })
     }
 
+    pub fn require(&self, r: &str) -> Res<()> {
+        fs::metadata(self.root.join(rel(r)?)).map(|_| ()).map_err(|e| missing(e, r))
+    }
+
     pub fn read(&self, r: &str) -> Res<Vec<u8>> {
         fs::read(self.root.join(rel(r)?)).map_err(|e| missing(e, r))
     }

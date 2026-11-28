@@ -33,7 +33,7 @@ pub fn pose_of(project: &str) -> String {
     format!("{project}_Animation")
 }
 
-fn pose_file(name: &str) -> String {
+pub fn pose_file(name: &str) -> String {
     format!("Model/{name}.anim.bfres.zs")
 }
 

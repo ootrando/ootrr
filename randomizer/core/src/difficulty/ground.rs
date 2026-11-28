@@ -488,6 +488,8 @@ impl Ground {
 }
 
 pub fn load(rf: &mut Romfs, map: &str) -> Res<Option<Ground>> {
+    rf.require(NAV_DIR)?;
+    rf.require(STITCHED_DIR)?;
     let one: String = format!("{NAV_DIR}/{map}{NAV_EXT}");
     let mut meshes: Vec<Mesh> = Vec::new();
     if rf.root.join(&one).is_file() {
@@ -519,6 +521,16 @@ mod tests {
     fn square(at: [f32; 3], s: f32, rise: f32) -> Mesh {
         let verts: Vec<[f32; 3]> = vec![at, [at[0] + s, at[1] + rise, at[2]], [at[0] + s, at[1] + rise, at[2] + s], [at[0], at[1], at[2] + s]];
         Mesh { verts, faces: vec![vec![0, 1, 2, 3]], open: vec![vec![true; 4]], next: vec![vec![-1; 4]] }
+    }
+
+    #[test]
+    fn a_game_folder_without_walk_meshes_is_an_error_and_not_an_empty_map() {
+        let dir: std::path::PathBuf = std::env::temp_dir().join(format!("ootrr_no_meshes_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut rf: Romfs = Romfs { root: dir.clone(), zs: crate::zs::Zs::new() };
+        let e: String = load(&mut rf, "DodongoCavern").err().unwrap().to_string();
+        assert!(e.contains(NAV_DIR), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

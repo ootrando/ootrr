@@ -14,7 +14,7 @@ fn req(index: usize, event: &str, old: &str, new: &str) -> Req {
 }
 
 pub fn edits() -> Vec<(&'static str, Vec<Req>)> {
-    vec![(WINDMILL, vec![req(51, "Event17", STORM_OWNED, STORM_TAUGHT), req(54, "Event69", STORM_OWNED, STORM_TAUGHT)])]
+    vec![(WINDMILL, vec![req(4, "Event9", STORM_OWNED, STORM_TAUGHT), req(17, "Event31", STORM_OWNED, STORM_TAUGHT), req(51, "Event17", STORM_OWNED, STORM_TAUGHT), req(54, "Event69", STORM_OWNED, STORM_TAUGHT)])]
 }
 
 pub fn stage_flow(rf: &mut Romfs, files: &mut Vec<StagedFile>) -> Res<()> {
@@ -75,6 +75,8 @@ mod tests {
             for r in &rs {
                 assert_eq!(name_at(&b, r.index).as_deref(), Some(r.new.as_str()), "{file} {}", r.event);
             }
+            let left: Vec<usize> = (0..b.flows[0].events.len()).filter(|i| name_at(&b, *i).as_deref() == Some(STORM_OWNED)).collect();
+            assert!(left.is_empty(), "{file} still reads {STORM_OWNED} at {left:?}");
         }
         let again: usize = files.len();
         assert!(stage_flow(&mut rf, &mut files).is_err());

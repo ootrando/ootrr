@@ -266,6 +266,7 @@ fn start_defaults(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
         edits.extend(crate::qol::skull_kid_session::defaults());
     }
     edits.push(crate::always::exp());
+    edits.extend(crate::trap_rooms::edits());
     crate::start_defaults::stage(rf, more, &edits)
 }
 

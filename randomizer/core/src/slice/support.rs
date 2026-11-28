@@ -460,6 +460,7 @@ pub fn plan(s: &Settings) -> Res<Plan> {
     notes.push(crate::bombchu_open::NOTE.to_string());
     notes.push(crate::water_gate::NOTE.to_string());
     notes.push(crate::lake_tree_wall::NOTE.to_string());
+    notes.push(crate::age_walls::NOTE.to_string());
     if short {
         notes.push(crate::short_get::NOTE.to_string());
     }
@@ -492,8 +493,9 @@ mod tests {
         assert_eq!(p.keys.map, Keep::Dungeon);
         assert!(p.intro);
         assert!(p.story && p.endings);
-        assert_eq!(p.notes.len(), 27);
+        assert_eq!(p.notes.len(), 28);
         assert!(p.notes.iter().any(|n| n == crate::lake_tree_wall::NOTE));
+        assert!(p.notes.iter().any(|n| n == crate::age_walls::NOTE));
         assert!(p.notes.iter().any(|n| n == crate::qol::gear_cycle::NOTE), "the gear cycle is always on");
         assert!(p.short && p.notes.iter().any(|n| n == crate::short_get::NOTE));
         assert!(!p.notes.iter().any(|n| n == crate::deku_bridge::NOTE));
